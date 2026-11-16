@@ -117,6 +117,8 @@ sealed interface LaunchSource {
     data class Home(val itemId: String) : LaunchSource
     /** Приложение из папки: окно возвращается в значок папки и растворяется в нём. */
     data class Folder(val folderId: String) : LaunchSource
+    /** Приложение из миниатюры большой папки: окно растёт из его значка и возвращается в него. */
+    data class FolderApp(val folderId: String, val appKey: String) : LaunchSource
     /** Меню приложений, поиск: значок есть только пока открыто меню. */
     data object Free : LaunchSource
 }
@@ -166,13 +168,14 @@ class LaunchFlight internal constructor(
     val progress: Float get() = anim.value
     var phase by mutableStateOf(LaunchPhase.Opening)
         internal set
-    internal var mode = if (source is LaunchSource.Home) AnchorMode.LIVE else AnchorMode.FIXED
+    internal var mode = if (source is LaunchSource.Home || source is LaunchSource.FolderApp) AnchorMode.LIVE else AnchorMode.FIXED
     internal var fade = false
     internal var lastAnchor = from
     internal var lastVisibility = 1f
     internal var job: Job? = null
     /** Приложение ещё предстоит запустить на этом открытии: запуск ждёт, пока карточка почти заполнит экран. */
     internal var needsLaunch = true
+    internal var pauses: () -> Int = { 0 }
 }
 
 /**
@@ -198,6 +201,13 @@ class LaunchPortal(private val scope: CoroutineScope) {
     val phase: LaunchPhase get() = current?.phase ?: LaunchPhase.Idle
     val active: Boolean get() = current != null || away.isNotEmpty()
 
+    /**
+     * Лаунчер остановлен: карточку не рисуем (иначе она попадёт в снимок обзора и шторки),
+     * но переход сохраняем — по возвращении на стол он свернётся в значок.
+     */
+    var hidden by mutableStateOf(false)
+        private set
+
     /** Актуальная позиция значка источника; null — значок не виден. Стол обновляет её на каждой композиции. */
     var locate: (LaunchSource, Rect) -> LaunchAnchor? = { _, _ -> null }
     var specs: LaunchSpecs = defaultSpecs()
@@ -205,9 +215,18 @@ class LaunchPortal(private val scope: CoroutineScope) {
     /** Значок стола скрыт, пока из него выросло окно или окно в него возвращается. */
     fun conceals(itemId: String): Boolean = current.hides(itemId) || away.any { it.hides(itemId) }
 
+    /** Миниатюра большой папки скрыта, пока из неё выросло окно или оно возвращается в неё. */
+    fun concealsFolderApp(folderId: String, appKey: String): Boolean =
+        current.hidesFolderApp(folderId, appKey) || away.any { it.hidesFolderApp(folderId, appKey) }
+
     private fun LaunchFlight?.hides(itemId: String): Boolean {
         val s = this?.source
         return s is LaunchSource.Home && s.itemId == itemId
+    }
+
+    private fun LaunchFlight?.hidesFolderApp(folderId: String, appKey: String): Boolean {
+        val s = this?.source
+        return s is LaunchSource.FolderApp && s.folderId == folderId && s.appKey == appKey
     }
 
     /** Насколько стол ушёл под окно: 0 — стол как обычно, 1 — окно на весь экран. */
@@ -263,8 +282,21 @@ class LaunchPortal(private val scope: CoroutineScope) {
         startClosing(f, specs.close, keepFree)
     }
 
-    /** Лаунчер снова на переднем плане. Закрываем, только если он уходил в паузу уже после тапа. */
+    /**
+     * Лаунчер скрыт целиком (onStop). Карточку не убираем: иначе при возвращении на стол нечего
+     * втягивать в значок. Только перестаём её рисовать, чтобы она не попала в снимок для обзора.
+     */
+    fun onHidden() {
+        hidden = true
+        away.toList().forEach(::finish)
+    }
+
+    /**
+     * Лаунчер снова на переднем плане. Если показалось приложение — окно втягивается в свой значок тем же
+     * движением, что и раскрывалось.
+     */
     fun onResumed(pauses: Int) {
+        hidden = false
         val f = current ?: return
         if (pauses > f.pauseMark) close()
     }
@@ -277,6 +309,7 @@ class LaunchPortal(private val scope: CoroutineScope) {
 
     private fun runOpen(f: LaunchFlight, pauses: () -> Int) {
         f.phase = LaunchPhase.Opening
+        f.pauses = pauses
         // Каждое открытие запускает приложение заново: после «Домой» оно в фоне, его нужно вернуть
         f.needsLaunch = true
         f.pauseMark = pauses()
@@ -362,8 +395,11 @@ class LaunchPortal(private val scope: CoroutineScope) {
     private companion object {
         const val TRAMPOLINE_TIMEOUT_MS = 2500L
         const val RETARGET_FROM = 0.9f
-        /** Доля пути, на которой запускается приложение: карточка уже почти на весь экран. */
-        const val LAUNCH_AT = 0.85f
+        /**
+         * Доля пути, на которой запускается приложение: карточка уже на весь экран, и системное окно,
+         * раскрывающееся из значка, проявляется на её однотонном фоне без второй видимой анимации.
+         */
+        const val LAUNCH_AT = 0.995f
     }
 }
 
@@ -372,7 +408,8 @@ const val DEBUG_SLOW_FACTOR = 5f
 
 /**
  * Пружины перехода. Жёсткость делится на квадрат замедления: время пружины обратно пропорционально корню из жёсткости.
- * Открытие ≈ 350–400 мс с лёгким перелётом, закрытие ≈ 300–380 мс со значком, который садится с отскоком.
+ * Открытие ≈ 350–400 мс с лёгким перелётом, закрытие ≈ 450–550 мс: окно мягко втягивается в значок,
+ * а не схлопывается рывком.
  */
 fun launchSpecs(expressive: Boolean, fx: Fx, closeScale: Float, slow: Boolean): LaunchSpecs {
     val k = if (slow) DEBUG_SLOW_FACTOR else 1f
@@ -380,8 +417,9 @@ fun launchSpecs(expressive: Boolean, fx: Fx, closeScale: Float, slow: Boolean): 
     return LaunchSpecs(
         open = spring(dampingRatio = if (expressive) tunedDamping(0.78f, fx.bounce) else 1f, stiffness = 300f * speed2, visibilityThreshold = 0.0005f),
         close = spring(
-            dampingRatio = if (expressive) tunedDamping(0.72f, fx.bounce) else 1f,
-            stiffness = 280f * speed2 / (closeScale * closeScale),
+            // Без отскока и с мягкой жёсткостью: резкое схлопывание читается как пропавшая картинка
+            dampingRatio = if (expressive) tunedDamping(0.9f, fx.bounce) else 1f,
+            stiffness = 165f * speed2 / (closeScale * closeScale),
             visibilityThreshold = 0.0005f,
         ),
         // Прошлое окно уходит быстро и без отскока: внимание уже на новом приложении
@@ -458,6 +496,8 @@ fun LaunchPortalOverlay(portal: LaunchPortal) {
 
     // Без pointerInput: касания проходят на стол, и значок можно нажать снова в любой момент
     Canvas(Modifier.fillMaxSize()) {
+        // Лаунчер остановлен: карточку не рисуем, она осталась бы в снимке обзора. Переход при этом цел
+        if (portal.hidden) return@Canvas
         // Стол почти не темнеет: обои остаются видны, стол уходит в глубину (масштаб и прозрачность задаёт HomeScreen)
         drawRect(Color.Black, alpha = 0.12f * portal.desktopProgress())
         // Уходящее окно садится в стол, который гаснет под новым окном: гаснет вместе с ним, без вспышки значка

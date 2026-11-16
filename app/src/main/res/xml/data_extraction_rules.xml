@@ -1,19 +1,20 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Правила переноса данных для Android 12+. Раскладка не переносится: идентификаторы виджетов в layout.json
+    привязаны к устройству, на другом телефоне они недействительны. Перенос раскладки между устройствами —
+    через «Резервная копия» в настройках лаунчера.
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="file" path="layout.json" />
+        <exclude domain="file" path="layout.json.bak" />
+        <exclude domain="file" path="layout.json.tmp" />
+        <exclude domain="sharedpref" path="layout_meta.xml" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="file" path="layout.json" />
+        <exclude domain="file" path="layout.json.bak" />
+        <exclude domain="file" path="layout.json.tmp" />
+        <exclude domain="sharedpref" path="layout_meta.xml" />
     </device-transfer>
-    -->
 </data-extraction-rules>

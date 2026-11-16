@@ -25,13 +25,15 @@ object MonoSynth {
 
     /** [fg] — передний слой adaptive-иконки на прозрачном, [full] — значок целиком. */
     fun fromAdaptive(fg: Bitmap, full: Bitmap): Bitmap? {
+        if (isIllustration(full)) return null
         val s = fg.width
         val px = IntArray(s * s)
         fg.getPixels(px, 0, s, 0, 0, s, s)
         var opaque = 0
         for (p in px) if (Color.alpha(p) > 160) opaque++
         // Передний слой закрывает почти весь значок — рисунок ищем на значке целиком, как на плашке
-        return if (opaque > s * s * 0.72f) fromPlate(full) ?: silhouette(full) else silhouette(fg)
+        val mask = if (opaque > s * s * 0.72f) fromPlate(full) ?: silhouette(full) else silhouette(fg)
+        return mask?.takeUnless(::isBlob)
     }
 
     /**
@@ -74,7 +76,89 @@ object MonoSynth {
     }
 
     /** Обычная (не adaptive) иконка. */
-    fun fromLegacy(bmp: Bitmap): Bitmap? = fromPlate(bmp) ?: silhouette(bmp)
+    fun fromLegacy(bmp: Bitmap): Bitmap? {
+        if (isIllustration(bmp)) return null
+        return (fromPlate(bmp) ?: silhouette(bmp))?.takeUnless(::isBlob)
+    }
+
+    /**
+     * Рисунок-иллюстрация (персонажи, сцены, фото): десятки цветов или много мелкой детали. Силуэт такого значка —
+     * каша пятен; лучше перекрасить сам значок в цвета темы (это делает UI, когда монохромного слоя нет).
+     * Пороги подобраны на реальных значках: у логотипов не больше ~16 заметных цветовых групп и спокойная яркость.
+     */
+    private fun isIllustration(src: Bitmap): Boolean {
+        val w = src.width
+        val h = src.height
+        val px = IntArray(w * h)
+        src.getPixels(px, 0, w, 0, 0, w, h)
+        val bins = IntArray(512)
+        var n = 0
+        var tv = 0.0
+        var tvn = 0
+        for (y in 0 until h) {
+            var prev = -1f
+            for (x in 0 until w) {
+                val p = px[y * w + x]
+                if (Color.alpha(p) <= 200) { prev = -1f; continue }
+                n++
+                bins[((Color.red(p) shr 5) shl 6) or ((Color.green(p) shr 5) shl 3) or (Color.blue(p) shr 5)]++
+                val l = 0.3f * Color.red(p) + 0.59f * Color.green(p) + 0.11f * Color.blue(p)
+                if (prev >= 0f) { tv += kotlin.math.abs(l - prev); tvn++ }
+                prev = l
+            }
+        }
+        if (n == 0) return false
+        val groups = bins.count { it > n * 0.004f }
+        val detail = if (tvn > 0) tv / tvn else 0.0
+        return groups >= 20 || detail >= 10.0
+    }
+
+    /**
+     * Бесформенное пятно: сплошной круг или квадрат без дыр и деталей (объектив целиком, плашка игры).
+     * По такому значку приложение не узнать — тоже лучше перекрасить сам значок.
+     */
+    private fun isBlob(mask: Bitmap): Boolean {
+        val s = mask.width
+        val stride = mask.rowBytes
+        val raw = ByteArray(stride * mask.height)
+        mask.copyPixelsToBuffer(java.nio.ByteBuffer.wrap(raw))
+        val on = BooleanArray(s * s) { (raw[(it / s) * stride + it % s].toInt() and 0xFF) > 127 }
+        var area = 0
+        var l = s; var t = s; var r = -1; var b = -1
+        var edge = 0
+        for (y in 0 until s) for (x in 0 until s) {
+            if (!on[y * s + x]) continue
+            area++
+            if (x < l) l = x
+            if (x > r) r = x
+            if (y < t) t = y
+            if (y > b) b = y
+            if (x == 0 || y == 0 || x == s - 1 || y == s - 1 ||
+                !on[y * s + x - 1] || !on[y * s + x + 1] || !on[(y - 1) * s + x] || !on[(y + 1) * s + x]) edge++
+        }
+        if (area == 0) return true
+        val fill = area.toFloat() / ((r - l + 1) * (b - t + 1))
+        val contour = edge.toFloat() / (2 * ((r - l + 1) + (b - t + 1)))
+        if (fill < 0.75f || contour >= 1f) return false
+        // Дыры внутри (кольцо, буква «О») — это уже рисунок: фон, не связанный с краем, заметной площади
+        val outside = BooleanArray(s * s)
+        val stack = IntArray(s * s)
+        var sp = 0
+        fun push(k: Int) { if (!on[k] && !outside[k]) { outside[k] = true; stack[sp++] = k } }
+        for (i in 0 until s) { push(i); push((s - 1) * s + i); push(i * s); push(i * s + s - 1) }
+        while (sp > 0) {
+            val j = stack[--sp]
+            val x = j % s
+            val y = j / s
+            if (x > 0) push(j - 1)
+            if (x < s - 1) push(j + 1)
+            if (y > 0) push(j - s)
+            if (y < s - 1) push(j + s)
+        }
+        var holes = 0
+        for (i in on.indices) if (!on[i] && !outside[i]) holes++
+        return holes < area * 0.01f
+    }
 
     private class Bounds(val l: Int, val t: Int, val r: Int, val b: Int) {
         val w get() = r - l + 1
@@ -124,7 +208,7 @@ object MonoSynth {
         var spread = 0
         for (p in samples) if (Color.alpha(p) > 200 && diff(p, br, bg, bb) > 0.16f) spread++
         if (spread > 24) return null
-        val out = IntArray(s * s)
+        val vals = FloatArray(s * s)
         var covered = 0
         for (i in px.indices) {
             val p = px[i]
@@ -132,11 +216,15 @@ object MonoSynth {
             val t = ((diff(p, br, bg, bb) - 0.09f) / 0.2f).coerceIn(0f, 1f)
             val v = a * t * t * (3f - 2f * t)
             if (v > 0.5f) covered++
-            out[i] = ((v * 255f).toInt() shl 24)
+            vals[i] = v
         }
         // Рисунок одного цвета с плашкой — различить нечего
         if (covered < s * s / 60) return null
-        return normalize(out, s)
+        // Внутри рисунка мелкие детали другого цвета вырезаем, как у силуэта: иначе объектив камеры
+        // со зрачком превращается в сплошной круг. Порог строже, чем у силуэта: разноцветные части логотипа на плашке
+        // (точки Ассистента) — это рисунок, а не детали
+        carve(px, vals, maxOther = 0.2f)
+        return normalize(IntArray(s * s) { ((vals[it] * 255f).toInt() shl 24) }, s)
     }
 
     /** Логотип на прозрачном: силуэт, из которого вырезаны мелкие детали другого цвета. */
@@ -144,34 +232,48 @@ object MonoSynth {
         val s = src.width
         val px = IntArray(s * s)
         src.getPixels(px, 0, s, 0, 0, s, s)
-        // Основной цвет логотипа — средний по непрозрачным точкам
+        if (px.none { Color.alpha(it) > 200 }) return null
+        // Полупрозрачные тени («длинная тень» у старых значков) в рисунок не попадают
+        // Порог высокий: тень у шаблонного значка Android доходит до половины непрозрачности и давала грязную полосу
+        val vals = FloatArray(s * s) { i ->
+            val a = ((Color.alpha(px[i]) / 255f - 0.6f) / 0.3f).coerceIn(0f, 1f)
+            a * a * (3f - 2f * a)
+        }
+        carve(px, vals)
+        return normalize(IntArray(s * s) { ((vals[it] * 255f).toInt() shl 24) }, s)
+    }
+
+    /**
+     * Вырезает из рисунка [vals] мелкие детали другого цвета (трубка в пузыре WhatsApp, зрачок объектива).
+     * Основной цвет — средний по точкам рисунка, уточнённый по близким к нему (иначе пёстрый логотип даёт серую
+     * кашу). Детали режем, только если их немного, и не режем, если от рисунка почти ничего не осталось бы:
+     * у многоцветного логотипа (Chrome, Gmail) остаётся силуэт, а не пустота. Раньше Chrome выходил пустым.
+     */
+    private fun carve(px: IntArray, vals: FloatArray, maxOther: Float = 0.35f) {
         var r = 0L; var g = 0L; var b = 0L; var n = 0
-        for (p in px) if (Color.alpha(p) > 200) { r += Color.red(p); g += Color.green(p); b += Color.blue(p); n++ }
-        if (n == 0) return null
+        for (i in px.indices) if (vals[i] > 0.5f) { val p = px[i]; r += Color.red(p); g += Color.green(p); b += Color.blue(p); n++ }
+        if (n == 0) return
         var mr = (r / n).toInt(); var mg = (g / n).toInt(); var mb = (b / n).toInt()
-        // Уточняем: среднее только по точкам, близким к среднему (иначе пёстрый логотип даёт серую кашу)
         r = 0; g = 0; b = 0
         var m = 0
-        for (p in px) if (Color.alpha(p) > 200 && diff(p, mr, mg, mb) < 0.22f) { r += Color.red(p); g += Color.green(p); b += Color.blue(p); m++ }
+        for (i in px.indices) if (vals[i] > 0.5f && diff(px[i], mr, mg, mb) < 0.22f) { val p = px[i]; r += Color.red(p); g += Color.green(p); b += Color.blue(p); m++ }
         if (m > n / 4) { mr = (r / m).toInt(); mg = (g / m).toInt(); mb = (b / m).toInt() }
         var other = 0
-        for (p in px) if (Color.alpha(p) > 200 && diff(p, mr, mg, mb) > 0.3f) other++
-        // Детали вырезаем, только если их немного: у многоцветного логотипа (Gmail, Фото) остаётся силуэт
-        val carve = other in (n / 40)..(n * 35 / 100)
-        val out = IntArray(s * s)
-        for (i in px.indices) {
-            val p = px[i]
-            // Полупрозрачные тени («длинная тень» у старых значков) в рисунок не попадают
-            // Порог высокий: тень у шаблонного значка Android доходит до половины непрозрачности и давала грязную полосу
-            val a = ((Color.alpha(p) / 255f - 0.6f) / 0.3f).coerceIn(0f, 1f)
-            var v = a * a * (3f - 2f * a)
-            if (carve && v > 0f) {
-                val t = ((diff(p, mr, mg, mb) - 0.2f) / 0.15f).coerceIn(0f, 1f)
+        for (i in px.indices) if (vals[i] > 0.5f && diff(px[i], mr, mg, mb) > 0.3f) other++
+        if (other < n / 40 || other > n * maxOther) return
+        val carved = FloatArray(vals.size)
+        var left = 0
+        for (i in vals.indices) {
+            var v = vals[i]
+            if (v > 0f) {
+                val t = ((diff(px[i], mr, mg, mb) - 0.2f) / 0.15f).coerceIn(0f, 1f)
                 v *= 1f - t * t * (3f - 2f * t)
             }
-            out[i] = ((v * 255f).toInt() shl 24)
+            carved[i] = v
+            if (v > 0.5f) left++
         }
-        return normalize(out, s)
+        if (left < n * 0.3f) return
+        carved.copyInto(vals)
     }
 
     /** Обрезает рисунок по границам и вписывает его по центру в одинаковую для всех значков область. */

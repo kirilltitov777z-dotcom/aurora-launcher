@@ -25,6 +25,12 @@
     <string name="menu_add_home">На рабочий стол</string>
     <string name="menu_to_dock">В док</string>
     <string name="menu_take_out">Достать из папки</string>
+    <string name="folder_large">Большая папка</string>
+    <string name="folder_make_large">Сделать большой</string>
+    <string name="folder_make_small">Сделать обычной</string>
+    <string name="folder_columns">Значков в строке</string>
+    <string name="folder_show_name">Название на столе</string>
+    <string name="folder_settings">Настройки папки</string>
     <string name="menu_select_more">Выбрать несколько</string>
     <string name="selection_count">Выбрано: %d</string>
     <string name="selection_remove">Убрать выбранные</string>
@@ -457,4 +463,8 @@
     <string name="dock_full">Док заполнен: сначала уберите из него значок</string>
     <string name="sb_show">Показывать строку поиска</string>
     <string name="sb_hint_engine">Поиск %1$s</string>
+    <string name="storage_title">Хранилище</string>
+    <string name="storage_clear_icons">Очистить кэш значков</string>
+    <string name="storage_cleared">Кэш значков очищен</string>
+    <string name="default_unavailable">Не удалось открыть настройки лаунчера</string>
 </resources>

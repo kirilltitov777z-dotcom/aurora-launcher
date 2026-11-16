@@ -44,8 +44,17 @@ data class HomeItem(
     val title: String = "",
     val children: List<String> = emptyList(),
     val widgetId: Int = -1,
+    /** Поставщик виджета: «пакет/класс#серийный номер профиля». По нему видно, что приложение удалено, а не обновляется. */
+    val provider: String = "",
+    /** Сколько значков в строке открытой папки; 0 — по размеру папки (3 у обычной, 4 у большой). */
+    val folderColumns: Int = 0,
+    /** Показывать название под папкой на столе. */
+    val folderLabel: Boolean = true,
 ) {
     val inDock: Boolean get() = page == DOCK
+
+    /** Большая папка занимает 2×2: в миниатюре 3×3 значка, в открытом виде — до пяти в строке. */
+    val largeFolder: Boolean get() = type == ItemType.FOLDER && (w > 1 || h > 1)
 
     companion object {
         const val DOCK = -1

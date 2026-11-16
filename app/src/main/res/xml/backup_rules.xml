@@ -1,13 +1,12 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Правила автобэкапа для Android 11 и ниже. Раскладка не переносится: идентификаторы виджетов в layout.json
+    привязаны к устройству, на другом телефоне они недействительны, и на столе оставались бы пустые места.
+    Перенос раскладки между устройствами — через «Резервная копия» в настройках лаунчера.
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="file" path="layout.json" />
+    <exclude domain="file" path="layout.json.bak" />
+    <exclude domain="file" path="layout.json.tmp" />
+    <exclude domain="sharedpref" path="layout_meta.xml" />
 </full-backup-content>

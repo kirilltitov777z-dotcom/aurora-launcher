@@ -1,5 +1,6 @@
 package com.example.expressivelauncher.data
 
+import android.app.role.RoleManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -16,6 +17,15 @@ import android.provider.Settings as SysSettings
 object Permissions {
 
     fun isDefaultHome(ctx: Context): Boolean {
+        // На Android 10+ домашнее приложение — это роль: она и есть источник правды. resolveActivity ниже иногда
+        // возвращает не то (диалог выбора, приложение-«однодневку») и тогда кнопка «Сделать основным» показывается
+        // даже у лаунчера, который уже выбран основным.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roles = runCatching { ctx.getSystemService(RoleManager::class.java) }.getOrNull()
+            if (roles != null && runCatching { roles.isRoleAvailable(RoleManager.ROLE_HOME) }.getOrDefault(false)) {
+                return runCatching { roles.isRoleHeld(RoleManager.ROLE_HOME) }.getOrDefault(false)
+            }
+        }
         val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
         val ri = runCatching { ctx.packageManager.resolveActivity(i, PackageManager.MATCH_DEFAULT_ONLY) }.getOrNull()
         return ri?.activityInfo?.packageName == ctx.packageName

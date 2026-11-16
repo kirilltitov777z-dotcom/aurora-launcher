@@ -417,7 +417,9 @@ fun AppIconImage(
             Box(
                 Modifier
                     .align(Alignment.TopEnd)
-                    .then(if (accentBadge) Modifier.offset(size * 0.1f, -size * 0.1f) else Modifier)
+                    // Счётчик выступает за угол, как значок M3, но лишь настолько, чтобы его не срезали
+                    // границы списков: целиком внутри плитки он сидел слишком близко к значку
+                    .offset(size * 0.05f, -size * 0.05f)
                     .size(size * if (accentBadge) 0.36f else 0.3f)
                     .clip(CircleShape)
                     .background(if (accentBadge) ac.field else colors.error)

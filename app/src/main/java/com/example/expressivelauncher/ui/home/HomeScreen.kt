@@ -190,11 +190,11 @@ fun HomeScreen(vm: LauncherViewModel, actions: HomeActions) {
     val wave = remember { WakeWave() }
     val portal = remember { LaunchPortal(scope) }
     val fx = LocalFx.current
-    // Прогреваем морфинги заранее, чтобы первое нажатие на значок не тратило кадр на их построение
+    // Прогреваем морфинги нажатия и окна заранее, чтобы первое нажатие на значок не тратило кадр на их построение
     LaunchedEffect(settings.iconShape) {
         withContext(Dispatchers.Default) {
-            ShapeMorphs.window(settings.iconShape)
             ShapeMorphs.press(settings.iconShape)
+            ShapeMorphs.window(settings.iconShape)
         }
     }
     // Цвет стартового окна приложений со стола, из дока и папок читаем заранее: на тапе нет межпроцессных вызовов
@@ -271,10 +271,10 @@ fun HomeScreen(vm: LauncherViewModel, actions: HomeActions) {
     // Где сейчас значок источника. Читается на каждом кадре: окно сворачивается в актуальное место значка,
     // даже если сменилась страница или экран повернули. null — значка не видно, окно уйдёт в центр и растворится
     portal.locate = { source, from ->
-        fun visible(item: HomeItem): androidx.compose.ui.geometry.Rect? {
+        // Куда нарисован элемент с учётом страницы, дока и уменьшения стола под окном
+        fun placed(item: HomeItem, r: androidx.compose.ui.geometry.Rect): androidx.compose.ui.geometry.Rect? {
             if (drawer.progress > 0.5f) return null
             val s = geometry.settings
-            val r = geometry.iconBounds(item, iconPxFor(item, geometry, density, s), labelPx(density, s))
             if (item.inDock) return r.takeIf { s.showDock }
             val shift = item.page - (pagerState.currentPage + pagerState.currentPageOffsetFraction)
             if (abs(shift) >= 1f) return null
@@ -287,11 +287,22 @@ fun HomeScreen(vm: LauncherViewModel, actions: HomeActions) {
                 c.x + (moved.right - c.x) * k, c.y + (moved.bottom - c.y) * k,
             )
         }
+
+        fun visible(item: HomeItem): androidx.compose.ui.geometry.Rect? {
+            val s = geometry.settings
+            return placed(item, geometry.iconBounds(item, iconPxFor(item, geometry, density, s), labelPx(density, s)))
+        }
+
         when (source) {
             is LaunchSource.Home -> geometry.items.firstOrNull { it.id == source.itemId }?.let(::visible)?.let { LaunchAnchor(it) }
             // Из папки окно возвращается в её значок и растворяется в миниатюре
             is LaunchSource.Folder -> geometry.items.firstOrNull { it.id == source.folderId }?.let(::visible)
                 ?.let { LaunchAnchor(androidx.compose.ui.geometry.Rect(it.center, it.width * 0.2f), fade = true) }
+            // Из миниатюры большой папки окно растёт и возвращается в саму миниатюру
+            is LaunchSource.FolderApp -> geometry.items.firstOrNull { it.id == source.folderId }?.let { folder ->
+                val index = folder.children.indexOf(source.appKey)
+                if (index < 0) null else placed(folder, folderMiniRect(geometry, folder, index, density))
+            }?.let { LaunchAnchor(it) }
             LaunchSource.Free -> if (drawer.progress > 0.01f) LaunchAnchor(from, visibility = ((drawer.progress - 0.5f) * 2f).coerceIn(0f, 1f)) else null
         }
     }
@@ -324,9 +335,20 @@ fun HomeScreen(vm: LauncherViewModel, actions: HomeActions) {
             launch = { repo.launch(app, view, rect, portal = true) },
         )
     }
+    // Сворачивание окна стартует прямо в onResume, до первого кадра: иначе на кадр виден уже уехавший стол без карточки
+    DisposableEffect(actions, portal) {
+        actions.resumeHook = { portal.onResumed(actions.pauseCount) }
+        onDispose { actions.resumeHook = null }
+    }
+    // Запасной путь, если активность вернулась раньше, чем стол зарегистрировал хук
     val resumeSignal = actions.resumeSignal
     LaunchedEffect(resumeSignal) {
         if (resumeSignal > 0) portal.onResumed(actions.pauseCount)
+    }
+    // Лаунчер скрылся целиком: перестаём рисовать карточку, пока система не сняла снимок экрана
+    val hiddenSignal = actions.hiddenSignal
+    LaunchedEffect(hiddenSignal) {
+        if (hiddenSignal > 0) portal.onHidden()
     }
 
     // Соседи расступаются, если палец задержался над занятой клеткой: при быстром проносе над сеткой значки стоят на месте
@@ -543,7 +565,17 @@ fun HomeScreen(vm: LauncherViewModel, actions: HomeActions) {
                                     geometry.iconBounds(target, iconPxFor(target, geometry, density, liveSettings), labelPx(density, liveSettings)),
                                     LaunchSource.Home(target.id),
                                 )
-                                target.type == ItemType.FOLDER -> { haptics.play(HapticKind.CLICK, HapticGroup.TOUCH); openFolderId = target.id }
+                                target.type == ItemType.FOLDER -> {
+                                    // Большая папка: миниатюра запускает приложение сразу, пустое место — открывает папку
+                                    val spot = folderAppAt(geometry, target, down.position, density)
+                                    val mini = spot?.first?.let { liveApps[it] }
+                                    if (spot != null && mini != null) {
+                                        launch(mini, spot.second, LaunchSource.FolderApp(target.id, mini.key))
+                                    } else {
+                                        haptics.play(HapticKind.CLICK, HapticGroup.TOUCH)
+                                        openFolderId = target.id
+                                    }
+                                }
                                 target.type == ItemType.CLOCK -> { haptics.play(HapticKind.CLICK, HapticGroup.TOUCH); actions.openClock() }
                                 else -> Unit
                             }
@@ -611,7 +643,9 @@ fun HomeScreen(vm: LauncherViewModel, actions: HomeActions) {
                             }
                             val bounds = geometry.itemBounds(target)
                             menu = MenuTarget(target, bounds)
-                            if (target.type == ItemType.WIDGET && !liveSettings.lockLayout) resizeId = target.id
+                            // Рамку изменения размера получают виджеты и большие папки: размер тянется за края
+                            val resizable = target.type == ItemType.WIDGET || (target.type == ItemType.FOLDER && target.largeFolder)
+                            if (resizable && !liveSettings.lockLayout) resizeId = target.id
                             if (liveSettings.lockLayout) return@awaitEachGesture
                         }
                         val dragTarget = target ?: return@awaitEachGesture
@@ -747,10 +781,16 @@ fun HomeScreen(vm: LauncherViewModel, actions: HomeActions) {
                     ) { page ->
                         Box(
                             Modifier.fillMaxSize().graphicsLayer {
+                                // Страница рисуется в свой постоянный слой: при перелистывании её содержимое не меняется,
+                                // и RenderThread только сдвигает готовую текстуру. Без слоя каждый кадр заново рисовались
+                                // тени подписей (гауссово размытие), маски обрезки виджетов и текст — на слабых GPU
+                                // (Mali-G57 MP1) это 15–50 мс на кадр
+                                compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen
                                 val offset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
                                 val amount = abs(offset).coerceIn(0f, 1f)
                                 if (amount == 0f) return@graphicsLayer
                                 applyPageTransition(transition, offset.coerceIn(-1f, 1f), amount)
+                                compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen
                             },
                         ) {
                             for (item in byPage[page].orEmpty()) {
@@ -811,7 +851,7 @@ fun HomeScreen(vm: LauncherViewModel, actions: HomeActions) {
                     rows = settings.rows,
                     onStart = { menu = null },
                     onBounds = { x, y, w, h ->
-                        val ok = vm.setWidgetBounds(resizing.id, x, y, w, h)
+                        val ok = vm.setItemBounds(resizing.id, x, y, w, h)
                         if (ok) haptics.play(HapticKind.TICK, HapticGroup.DRAG)
                         ok
                     },
@@ -974,29 +1014,28 @@ fun HomeScreen(vm: LauncherViewModel, actions: HomeActions) {
         val folder = items.firstOrNull { it.id == openFolderId && it.type == ItemType.FOLDER }
         // Папка распалась, когда из неё вынули предпоследнее приложение: пустое окно и размытие оставаться не должны
         LaunchedEffect(folder == null, openFolderId) { if (folder == null) openFolderId = null }
-        var lastFolder by remember { mutableStateOf<HomeItem?>(null) }
-        if (folder != null) lastFolder = folder
-        CompositionLocalProvider(LocalBackdrop provides homeBackdrop) {
-        AnimatedVisibility(
-            visible = folder != null,
-            enter = fadeIn(MaterialTheme.motionScheme.fastEffectsSpec()),
-            exit = fadeOut(MaterialTheme.motionScheme.fastEffectsSpec()),
-        ) {
-            val f = lastFolder
-            if (f != null) {
-                val bounds = geometry.itemBounds(f)
+        // Закрывающаяся папка: пока её форма втягивается в плитку, окно остаётся в композиции
+        var closingFolder by remember { mutableStateOf<HomeItem?>(null) }
+        if (folder != null) closingFolder = null
+        val shownFolder = folder ?: closingFolder
+        if (shownFolder != null) {
+            val open = folder != null
+            CompositionLocalProvider(LocalBackdrop provides homeBackdrop) {
+                // Папка «вытекает» из плитки: её точный прямоугольник — начало формы
                 FolderOverlay(
-                    folder = f, appMap = appMap, vm = vm,
-                    origin = TransformOrigin(
-                        (bounds.center.x / screenSize.width).coerceIn(0f, 1f),
-                        (bounds.center.y / screenSize.height).coerceIn(0f, 1f),
-                    ),
-                    onDismiss = { openFolderId = null },
-                    onLaunch = { app, rect -> openFolderId = null; launch(app, rect, LaunchSource.Folder(f.id)) },
+                    folder = shownFolder, appMap = appMap, vm = vm,
+                    source = folderTile(geometry, shownFolder, density),
+                    open = open,
+                    onClosed = { closingFolder = null },
+                    onDismiss = { if (open) { closingFolder = shownFolder; openFolderId = null } },
+                    onLaunch = { app, rect ->
+                        closingFolder = shownFolder
+                        openFolderId = null
+                        launch(app, rect, LaunchSource.Folder(shownFolder.id))
+                    },
                     onAppInfo = { repo.openAppInfo(it, null) },
                 )
             }
-        }
         }
 
         // ---------- Выбор виджета ----------
@@ -1139,8 +1178,8 @@ private fun HomeCell(
                 AppCell(app, cellW, cellH, settings.showHomeLabels, { morph }, { portal.conceals(item.id) }) { geometry.contentHeights[item.id] = it }
             }
             ItemType.FOLDER -> FolderCell(
-                item, appMap, homeIconSize(cellW, cellH, settings.iconScale, settings.showHomeLabels),
-                labelWidth = if (settings.showHomeLabels) cellW else null,
+                item, appMap, cellW, cellH,
+                concealed = { key -> portal.concealsFolderApp(item.id, key) },
             )
             ItemType.WIDGET -> HomeWidget(item, vm.widgets, Modifier.fillMaxSize().padding(4.dp))
             ItemType.CLOCK -> ClockCard(settings.clockStyle, wakeCount)
@@ -1162,7 +1201,10 @@ fun homeIconSize(cellW: androidx.compose.ui.unit.Dp, cellH: androidx.compose.ui.
 /** Размер значка в пикселях, как он нарисован: нужен, чтобы анимация запуска стартовала ровно из него. */
 private fun iconPxFor(item: HomeItem, geometry: HomeGeometry, density: androidx.compose.ui.unit.Density, s: com.example.expressivelauncher.data.Settings): Float = with(density) {
     if (item.inDock) dockIconSize(s, if (geometry.dock.width > 0f) geometry.dock.width.toDp() else null).toPx()
-    else homeIconSize(geometry.cellW.toDp(), geometry.cellH.toDp(), s.iconScale, s.showHomeLabels).toPx()
+    else if (item.type == com.example.expressivelauncher.data.ItemType.FOLDER) {
+        val tile = folderTile(geometry, item, this)
+        min(tile.width, tile.height)
+    } else homeIconSize(geometry.cellW.toDp(), geometry.cellH.toDp(), s.iconScale, s.showHomeLabels).toPx()
 }
 
 private fun labelPx(density: androidx.compose.ui.unit.Density, s: com.example.expressivelauncher.data.Settings): Float = with(density) {
@@ -1241,39 +1283,211 @@ private fun AppCell(
     }
 }
 
+/**
+ * Плитка папки на столе в стиле темы: стекло (Liquid Glass), насыщенная панель акцента (Expressive)
+ * или сплошная поверхность (Lite). У большой папки плитка занимает всю её сетку, как виджет, и
+ * показывает приложения крупными плитками: по плитке приложение запускается сразу, без открытия папки.
+ * Если приложений больше, чем плиток, последняя — «ещё» с четырьмя миниатюрами и открывает папку.
+ */
 @Composable
 internal fun FolderCell(
     item: HomeItem,
     appMap: Map<String, AppInfo>,
-    size: androidx.compose.ui.unit.Dp,
-    labelWidth: androidx.compose.ui.unit.Dp? = null,
+    cellW: androidx.compose.ui.unit.Dp,
+    cellH: androidx.compose.ui.unit.Dp,
+    concealed: (String) -> Boolean = { false },
+    showLabel: Boolean = true,
+    side: androidx.compose.ui.unit.Dp? = null,
 ) {
     val s = LocalSettings.current
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        val glass = com.example.expressivelauncher.ui.theme.LocalThemeSpec.current.glass
-        // Liquid Glass: плитка папки — стекло; скруглённый прямоугольник рисуется аналитически, без маски контура
-        Box(
-            if (glass) Modifier.size(size) else Modifier.size(size).clip(s.iconShape.toComposeShape()).background(MaterialTheme.colorScheme.secondaryContainer),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (glass) com.example.expressivelauncher.ui.components.LiquidSurface(
-                androidx.compose.foundation.shape.RoundedCornerShape(percent = 26), Modifier.matchParentSize(), shadow = false, blockTouches = false,
+    val spec = com.example.expressivelauncher.ui.theme.LocalThemeSpec.current
+    val cs = MaterialTheme.colorScheme
+    val density = LocalDensity.current
+    val large = item.largeFolder
+    val showLabelNow = showLabel && s.showHomeLabels && item.folderLabel
+    val shape = when {
+        spec.lite -> androidx.compose.foundation.shape.RoundedCornerShape(spec.uniformCorner ?: 16.dp)
+        large -> androidx.compose.foundation.shape.RoundedCornerShape(30.dp)
+        else -> androidx.compose.foundation.shape.RoundedCornerShape(percent = 26)
+    }
+    val panel = when {
+        spec.accentChrome -> accentColors().panel
+        spec.lite -> cs.surfaceContainerHigh
+        else -> cs.secondaryContainer.copy(alpha = 0.95f)
+    }
+    // Плитка «ещё» внутри большой папки: светлее панели, чтобы читалась как отдельная плитка
+    val overflowBg = if (spec.lite) cs.surfaceContainerHighest else Color.White.copy(alpha = 0.18f)
+    val label = item.title.ifBlank { stringResource(R.string.folder_default_name) }
+    if (large) {
+        // Большая папка: плитка во всю площадь ячеек, подпись — отдельной строкой внизу
+        val textHeight = if (showLabelNow) with(density) { (16.sp * s.labelScale).toDp() } else 0.dp
+        Box(Modifier.size(cellW * item.w, cellH * item.h)) {
+            FolderTile(
+                item, appMap, shape, panel, overflowBg, spec.glass, concealed,
+                Modifier.fillMaxSize().padding(
+                    start = FOLDER_INSET_DP.dp, top = FOLDER_INSET_DP.dp, end = FOLDER_INSET_DP.dp,
+                    bottom = FOLDER_INSET_DP.dp + if (showLabelNow) 4.dp + textHeight else 0.dp,
+                ),
+            )
+            if (showLabelNow) {
+                AppLabel(
+                    label,
+                    Modifier.align(Alignment.BottomCenter).padding(bottom = FOLDER_INSET_DP.dp).width(cellW * item.w),
+                    onWallpaper = true,
+                )
+            }
+        }
+    } else {
+        // В доке плитка совпадает с местом значка: размер приходит снаружи
+        val tile = side ?: homeIconSize(cellW, cellH, s.iconScale, s.showHomeLabels)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            FolderTile(item, appMap, shape, panel, overflowBg, spec.glass, concealed, Modifier.size(tile))
+            if (showLabelNow) {
+                Spacer(Modifier.height(4.dp))
+                AppLabel(label, Modifier.width(cellW), onWallpaper = true)
+            }
+        }
+    }
+}
+
+/** Плитка папки: содержимое считается теми же функциями [folderContents], что и касания. */
+@Composable
+private fun FolderTile(
+    item: HomeItem,
+    appMap: Map<String, AppInfo>,
+    shape: androidx.compose.ui.graphics.Shape,
+    panel: Color,
+    overflowBg: Color,
+    glass: Boolean,
+    concealed: (String) -> Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val density = LocalDensity.current
+    val spec = com.example.expressivelauncher.ui.theme.LocalThemeSpec.current
+    Box(modifier) {
+        if (glass) {
+            com.example.expressivelauncher.ui.components.LiquidSurface(
+                shape, Modifier.matchParentSize(), shadow = false, blockTouches = false,
             ) { }
-            val mini = size * 0.36f
-            Column(verticalArrangement = Arrangement.spacedBy(size * 0.06f)) {
-                for (row in item.children.take(4).chunked(2)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(size * 0.06f)) {
-                        for (k in row) {
-                            val app = appMap[k]
-                            if (app != null) AppIconImage(app, mini, showBadge = false) else Spacer(Modifier.size(mini))
+        } else if (spec.accentChrome) {
+            // Expressive: папка — матовое стекло на размытых обоях (как док и меню темы), а не сплошная панель
+            com.example.expressivelauncher.ui.components.LiquidSurface(
+                shape, Modifier.matchParentSize(), color = panel, alpha = 0.66f,
+                shadow = false, frosted = true, blockTouches = false,
+            ) { }
+        } else {
+            Box(Modifier.matchParentSize().clip(shape).background(panel))
+        }
+        BoxWithConstraints(Modifier.matchParentSize()) {
+            val widthPx = constraints.maxWidth.toFloat()
+            val heightPx = constraints.maxHeight.toFloat()
+            if (widthPx <= 0f || heightPx <= 0f) return@BoxWithConstraints
+            val size = androidx.compose.ui.geometry.Size(widthPx, heightPx)
+            if (item.largeFolder) {
+                // Крупные плитки приложений; последняя клетка — «ещё», если всё не помещается
+                val contents = folderContents(item)
+                val grid = contents.grid
+                val side = with(density) { grid.iconSide(size).toDp() }
+                for (i in 0 until grid.count) {
+                    val rect = grid.rect(size, i)
+                    val at = Modifier
+                        .offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
+                        .size(side)
+                    // Плитка «ещё» идёт сразу за приложениями: в сетке 3×3 из шести приложений
+                    // она стоит в последней строке, а не в углу через пустые клетки
+                    if (contents.overflow && i == contents.big) {
+                        FolderOverflowCell(item.children.drop(contents.big), appMap, at, overflowBg, concealed)
+                    } else {
+                        val app = item.children.getOrNull(i)?.let(appMap::get) ?: continue
+                        Box(at) {
+                            AppIconImage(
+                                app, side,
+                                Modifier.graphicsLayer { alpha = if (concealed(app.key)) 0f else 1f },
+                                showBadge = false,
+                            )
                         }
+                    }
+                }
+            } else {
+                // Обычная папка: до четырёх миниатюр, как раньше
+                val mini = min(widthPx, heightPx) * 0.34f
+                val gap = min(widthPx, heightPx) * 0.06f
+                val block = mini * 2 + gap
+                val left = (widthPx - block) / 2f
+                val top = (heightPx - block) / 2f
+                val miniDp = with(density) { mini.toDp() }
+                val shown = min(item.children.size, 4)
+                for (i in 0 until shown) {
+                    val app = appMap[item.children[i]] ?: continue
+                    val col = i % 2
+                    val row = i / 2
+                    Box(
+                        Modifier
+                            .offset {
+                                IntOffset(
+                                    (left + col * (mini + gap)).roundToInt(),
+                                    (top + row * (mini + gap)).roundToInt(),
+                                )
+                            }
+                            .size(miniDp),
+                    ) {
+                        AppIconImage(
+                            app, miniDp, Modifier.graphicsLayer { alpha = if (concealed(app.key)) 0f else 1f },
+                            showBadge = false,
+                        )
                     }
                 }
             }
         }
-        if (labelWidth != null) {
-            Spacer(Modifier.height(4.dp))
-            AppLabel(item.title.ifBlank { stringResource(R.string.folder_default_name) }, Modifier.width(labelWidth), onWallpaper = true)
+    }
+}
+
+/** Плитка «ещё»: до четырёх оставшихся значков в плитке размером с крупный значок. */
+@Composable
+private fun FolderOverflowCell(
+    keys: List<String>,
+    appMap: Map<String, AppInfo>,
+    modifier: Modifier,
+    background: Color,
+    concealed: (String) -> Boolean,
+) {
+    val cells = keys.take(FOLDER_OVERFLOW_MINI)
+    Box(modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(percent = 30)).background(background)) {
+        BoxWithConstraints(Modifier.matchParentSize()) {
+            val width = constraints.maxWidth.toFloat()
+            val height = constraints.maxHeight.toFloat()
+            if (width <= 0f || height <= 0f || cells.isEmpty()) return@BoxWithConstraints
+            val density = LocalDensity.current
+            val cols = if (cells.size == 1) 1 else 2
+            val rows = if (cells.size <= 2) 1 else 2
+            val side = min(width, height)
+            val mini = side * 0.38f
+            val gap = side * 0.055f
+            val blockW = mini * cols + gap * (cols - 1)
+            val blockH = mini * rows + gap * (rows - 1)
+            val left = (width - blockW) / 2f
+            val top = (height - blockH) / 2f
+            val miniDp = with(density) { mini.toDp() }
+            for (i in cells.indices) {
+                val app = appMap[cells[i]] ?: continue
+                val col = i % cols
+                val row = i / cols
+                Box(
+                    Modifier
+                        .offset {
+                            IntOffset(
+                                (left + col * (mini + gap)).roundToInt(),
+                                (top + row * (mini + gap)).roundToInt(),
+                            )
+                        }
+                        .size(miniDp),
+                ) {
+                    AppIconImage(
+                        app, miniDp, Modifier.graphicsLayer { alpha = if (concealed(app.key)) 0f else 1f },
+                        showBadge = false,
+                    )
+                }
+            }
         }
     }
 }
@@ -1348,7 +1562,10 @@ private fun BottomDeck(
                             ) {
                                 when (item.type) {
                                     ItemType.APP -> appMap[item.appKey]?.let { AppIconImage(it, dockIcon, morph = { morph }) }
-                                    ItemType.FOLDER -> FolderCell(item, appMap, dockIcon)
+                                    ItemType.FOLDER -> FolderCell(
+                                        item, appMap, dockIcon, dockIcon,
+                                        showLabel = false, side = dockIcon,
+                                    )
                                     else -> Unit
                                 }
                                 if (selected) {
@@ -1645,7 +1862,10 @@ private fun DragLayer(drag: DragState, geometry: HomeGeometry, items: List<HomeI
     ) {
         when (item.type) {
             ItemType.APP -> appMap[item.appKey]?.let { AppIconImage(it, ghostSize!! * s.iconScale) }
-            ItemType.FOLDER -> FolderCell(item, appMap, ghostSize!! * s.iconScale)
+            ItemType.FOLDER -> FolderCell(
+                item, appMap, ghostSize!! * s.iconScale, ghostSize * s.iconScale,
+                showLabel = false, side = ghostSize * s.iconScale,
+            )
             ItemType.WIDGET, ItemType.CLOCK -> Box(
                 Modifier
                     .size(with(density) { (geometry.cellW * item.w).toDp() }, with(density) { (geometry.cellH * item.h).toDp() })

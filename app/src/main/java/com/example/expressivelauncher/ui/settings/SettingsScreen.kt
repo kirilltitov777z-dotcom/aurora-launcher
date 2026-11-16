@@ -2,7 +2,6 @@ package com.example.expressivelauncher.ui.settings
 
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -186,6 +185,7 @@ import com.example.expressivelauncher.ui.LocalHaptics
 import com.example.expressivelauncher.ui.theme.tunedDamping
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
@@ -281,12 +281,6 @@ fun SettingsScreen(vm: LauncherViewModel, actions: HomeActions, onClose: () -> U
 
 // ---------------------------------------------------------------- главная
 
-private fun isDefaultHome(ctx: Context): Boolean {
-    val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-    val ri = ctx.packageManager.resolveActivity(i, PackageManager.MATCH_DEFAULT_ONLY)
-    return ri?.activityInfo?.packageName == ctx.packageName
-}
-
 private class SearchEntry(val title: Int, val page: SettingsPage)
 
 private val searchIndex = listOf(
@@ -323,8 +317,12 @@ private fun MainPage(vm: LauncherViewModel, actions: HomeActions, onClose: () ->
     val s by vm.settings.collectAsState()
     val context = LocalContext.current
     val focused = LocalWindowInfo.current.isWindowFocused
-    var isDefault by remember { mutableStateOf(isDefaultHome(context)) }
-    LaunchedEffect(focused) { if (focused) isDefault = isDefaultHome(context) }
+    var isDefault by remember { mutableStateOf(com.example.expressivelauncher.data.Permissions.isDefaultHome(context)) }
+    // Фокус возвращается после системного диалога, а defaultHomeSignal — сразу после его закрытия:
+    // так карточка обновляется, даже если окно не успело потерять фокус
+    LaunchedEffect(focused, actions.defaultHomeSignal) {
+        isDefault = com.example.expressivelauncher.data.Permissions.isDefaultHome(context)
+    }
     var query by rememberSaveable { mutableStateOf("") }
 
     // Автор и канал — сверху, как в Expressive Keyboard
@@ -946,14 +944,14 @@ private fun GesturesPage(vm: LauncherViewModel, actions: HomeActions) {
 private fun PermissionsSection(actions: HomeActions, onlyGestures: Boolean = false) {
     val context = LocalContext.current
     val focused = LocalWindowInfo.current.isWindowFocused
-    var tick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(focused) { if (focused) tick++ }
     val P = com.example.expressivelauncher.data.Permissions
-    val home = remember(tick) { P.isDefaultHome(context) }
-    val notif = remember(tick) { P.hasNotificationAccess(context) }
-    val a11y = remember(tick) { P.hasAccessibility(context) }
-    val files = remember(tick) { P.hasAllFilesAccess() }
-    val shortcuts = remember(tick) { P.hasShortcutAccess(context) }
+    // Перечитываем при возврате фокуса и сразу после системного диалога выбора лаунчера
+    val key = focused to actions.defaultHomeSignal
+    val home = remember(key) { P.isDefaultHome(context) }
+    val notif = remember(key) { P.hasNotificationAccess(context) }
+    val a11y = remember(key) { P.hasAccessibility(context) }
+    val files = remember(key) { P.hasAllFilesAccess() }
+    val shortcuts = remember(key) { P.hasShortcutAccess(context) }
     SettingsSection(stringResource(R.string.permissions)) {
         if (!onlyGestures) {
             PermissionItem(Icons.Rounded.Home, stringResource(R.string.perm_default), stringResource(R.string.perm_default_hint), home, actions::openDefaultLauncherSettings)
@@ -1040,6 +1038,7 @@ private fun AuthorLine() {
 private fun AboutPage(actions: HomeActions) {
     AboutCard()
     AuthorLine()
+    StorageSection()
     CrashSection()
     PermissionsSection(actions)
     SettingsSection(stringResource(R.string.device)) {
@@ -1052,16 +1051,46 @@ private fun AboutPage(actions: HomeActions) {
     }
 }
 
+/** Сколько места занимает лаунчер и кнопка сброса кэша значков: по этим цифрам видно, что разрослось. */
+@Composable
+private fun StorageSection() {
+    val context = LocalContext.current
+    val repo = com.example.expressivelauncher.ui.LocalRepo.current
+    var rev by remember { mutableIntStateOf(0) }
+    val parts by androidx.compose.runtime.produceState<List<com.example.expressivelauncher.data.StorageInfo.Part>?>(null, rev) {
+        if (rev > 0) kotlinx.coroutines.delay(800) // сброс кэша идёт в фоне
+        value = withContext(Dispatchers.IO) { runCatching { com.example.expressivelauncher.data.StorageInfo.measure(context) }.getOrNull() }
+    }
+    val cleared = stringResource(R.string.storage_cleared)
+    val shown = parts ?: return
+    SettingsSection(stringResource(R.string.storage_title)) {
+        GroupItem {
+            Text(
+                com.example.expressivelauncher.data.StorageInfo.format(shown),
+                Modifier.padding(16.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        ActionItem(Icons.Rounded.DeleteSweep, stringResource(R.string.storage_clear_icons), null, onClick = {
+            repo.clearIconCache()
+            com.example.expressivelauncher.ui.components.LauncherToast.show(cleared)
+            rev++
+        })
+    }
+}
+
 /** Отчёт о сбоях: показывается, только если лаунчер падал или система его выгружала. */
 @Composable
 private fun CrashSection() {
     val context = LocalContext.current
     val C = com.example.expressivelauncher.data.CrashLog
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     var rev by remember { mutableIntStateOf(0) }
     val exits = remember(rev) { C.exits(context) }
     val stored = remember(rev) { C.stored(context) }
+    val copied = stringResource(R.string.crash_copied)
     if (exits.isEmpty() && stored == null) return
-    val report = { C.report(context, BuildConfig.VERSION_NAME) }
     SettingsSection(stringResource(R.string.crash_title)) {
         GroupItem {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1073,16 +1102,23 @@ private fun CrashSection() {
             }
         }
         ActionItem(Icons.Rounded.Share, stringResource(R.string.crash_send), null, onClick = {
-            runCatching {
-                val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, report())
-                context.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            // Отчёт (вместе с подсчётом размера кэша) собираем в фоне, чтобы не морозить интерфейс
+            scope.launch {
+                val text = C.report(context, BuildConfig.VERSION_NAME)
+                runCatching {
+                    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+                    context.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
             }
         })
         ActionItem(Icons.Rounded.ContentCopy, stringResource(R.string.crash_copy), null, onClick = {
-            runCatching {
-                val cm = context.getSystemService(android.content.ClipboardManager::class.java)
-                cm.setPrimaryClip(android.content.ClipData.newPlainText("crash", report()))
-                com.example.expressivelauncher.ui.components.LauncherToast.show(context.getString(R.string.crash_copied))
+            scope.launch {
+                val text = C.report(context, BuildConfig.VERSION_NAME)
+                runCatching {
+                    val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("crash", text))
+                    com.example.expressivelauncher.ui.components.LauncherToast.show(copied)
+                }
             }
         })
         ActionItem(Icons.Rounded.DeleteSweep, stringResource(R.string.crash_clear), null, onClick = {

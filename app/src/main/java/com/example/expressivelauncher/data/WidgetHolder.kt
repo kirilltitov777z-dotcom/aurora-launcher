@@ -5,6 +5,10 @@ import android.appwidget.AppWidgetHostView
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /** Один AppWidgetHost на процесс. Слушает обновления, пока Activity на экране. */
 class WidgetHolder(context: Context) {
@@ -12,11 +16,16 @@ class WidgetHolder(context: Context) {
     val manager: AppWidgetManager = AppWidgetManager.getInstance(appContext)
     val host = AppWidgetHost(appContext, HOST_ID)
     private var listening = false
+    /** Заметки о сбоях пишутся в файл: только не в главном потоке, иначе кадр с виджетом может подвиснуть. */
+    private val logScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun startListening() {
         if (listening) return
         listening = true
-        runCatching { host.startListening() }
+        runCatching { host.startListening() }.onFailure { e ->
+            listening = false
+            logScope.launch { CrashLog.note(appContext, "AppWidgetHost.startListening не сработал: виджеты не будут обновляться", e) }
+        }
     }
 
     fun stopListening() {
@@ -51,7 +60,9 @@ class WidgetHolder(context: Context) {
         }
         val info = info(id) ?: return null
         sentSizes.remove(id)
-        return host.createView(context, id, info).also { views[id] = it }
+        return runCatching { host.createView(context, id, info) }
+            .onFailure { e -> logScope.launch { CrashLog.note(appContext, "Не удалось создать виджет ${info.provider.flattenToShortString()}", e) } }
+            .getOrNull()?.also { views[id] = it }
     }
 
     /** Сообщает провайдеру размер, только если он изменился: каждое сообщение — это новый RemoteViews от провайдера. */

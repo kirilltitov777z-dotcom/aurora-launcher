@@ -20,6 +20,7 @@ import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.os.UserHandle
 import android.os.UserManager
 import android.util.LruCache
@@ -40,6 +41,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -69,6 +71,14 @@ class AppIcon(
 class ShortcutEntry(val info: ShortcutInfo, val label: String, val icon: ImageBitmap?)
 
 private val HEX_DIGITS = "0123456789abcdef"
+
+/**
+ * Папка дискового кэша значков. v15: круглые плашки старых значков тоже растягиваются на всю фигуру
+ * (цвет края ищется по самой кромке рисунка, а не по описанной окружности). v14: круглые и квадратные старые значки растягиваются на всю фигуру. v13: синтез монохромного слоя не делает его для иллюстраций и бесформенных пятен
+ * и вырезает детали на плашке. v12: на Android 8–12 монохромный слой читается из XML значка. v11: значок, снятый
+ * во время обновления приложения, больше не сохраняется.
+ */
+const val ICON_CACHE_DIR = "icons_v15"
 
 class AppRepository(
     private val context: Context,
@@ -109,6 +119,22 @@ class AppRepository(
     @Volatile
     private var overrideKeys: Set<String> = emptySet()
 
+    // v11: прежний кэш мог хранить значок-«робота» Android или значок без монохромного слоя, снятый с устаревшего
+    // описания активности во время обновления приложения. Ключ меняется вместе с темой значков, обновлением
+    // приложения и размером — устаревший файл просто не найдётся, а лишнее вытесняет trimDisk
+    private val diskDir = File(context.cacheDir, DISK_DIR_NAME)
+
+    /** Пакеты, у которых пришло событие (обновление, установка), а список активностей ещё не перечитан. */
+    private val stale = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /** Сколько раз значок пакета перечитывали из-за стандартной иконки Android: если она настоящая, цикла не будет. */
+    private val brokenRetries = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    private val diskWrites = java.util.concurrent.atomic.AtomicInteger()
+    private val trimming = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** Стандартный значок Android (зелёный «робот»): система отдаёт его, если ресурсы приложения не открылись. */
+    private val defaultIconState by lazy { runCatching { context.packageManager.defaultActivityIcon.constantState }.getOrNull() }
+
     @Volatile
     var iconThemeId: String = initialTheme
         private set
@@ -129,6 +155,8 @@ class AppRepository(
 
         override fun onPackageAdded(packageName: String, user: UserHandle) {
             updatedAt.remove(packageName)
+            stale += packageName
+            eventAt[packageName] = SystemClock.elapsedRealtime()
             refreshThemes()
             scheduleRefresh()
         }
@@ -154,12 +182,19 @@ class AppRepository(
         // Список приложений не ждёт тем значков: на холодном старте стол появляется сразу, а не через секунду
         scheduleRefresh(0)
         scope.launch(Dispatchers.Default) {
-            // Кэш прошлой версии значков больше не читается
-            runCatching { listOf("icons_v2", "icons_v3", "icons_v4", "icons_v5", "icons_v6", "icons_v7").forEach { File(context.cacheDir, it).takeIf { d -> d.exists() }?.deleteRecursively() } }
-            overrideKeys = overridesDir.list()?.map { it.removeSuffix(".png") }?.toSet().orEmpty()
-            themes.refresh()
-            if (iconThemeId.isNotEmpty()) theme = themes.load(iconThemeId)
-            iconsReady.complete(Unit)
+            // Кэши прошлых версий значков больше не читаются: раньше чистились только перечисленные папки,
+            // и v8 с v9 оставались у всех навсегда
+            runCatching { context.cacheDir.listFiles { f -> f.isDirectory && f.name.startsWith("icons_v") && f.name != DISK_DIR_NAME }?.forEach { it.deleteRecursively() } }
+            runCatching { overrideKeys = overridesDir.list()?.map { it.removeSuffix(".png") }?.toSet().orEmpty() }
+            try {
+                // Ошибка разбора одного набора не должна оставить лаунчер без значков вообще:
+                // iconsReady обязательно завершаем, иначе icon() будет ждать его вечно
+                runCatching { themes.refresh() }
+                runCatching { if (iconThemeId.isNotEmpty()) theme = themes.load(iconThemeId) }
+            } finally {
+                iconsReady.complete(Unit)
+            }
+            runCatching { trimDisk() }
         }
     }
 
@@ -167,7 +202,11 @@ class AppRepository(
         refreshJob?.cancel()
         refreshJob = scope.launch(Dispatchers.Default) {
             delay(delayMs)
+            // Пакеты, о которых уже знаем: их описания активностей этот обход обновит. Событие, пришедшее во время
+            // обхода, останется в stale до следующего
+            val fresh = stale.toList()
             val list = queryApps()
+            stale.removeAll(fresh.toSet())
             byKey = list.associateBy { it.key }
             _apps.value = list
             _loaded.value = true
@@ -206,6 +245,8 @@ class AppRepository(
         return result
     }
 
+    fun serialOf(user: UserHandle): Long = userManager.getSerialNumberForUser(user)
+
     /** Пакет реально удалён: отключённые и временно недоступные приложения сюда не попадают. */
     fun isPackageGone(pkg: String, userSerial: Long): Boolean {
         val user = userManager.getUserForSerialNumber(userSerial) ?: return true
@@ -224,20 +265,63 @@ class AppRepository(
 
     private fun loadIcon(app: AppInfo): AppIcon? {
         cache.get(app.key)?.let { return it }
+        val themeAtStart = iconThemeId
         return runCatching {
-            val icon = loadOverride(app) ?: run {
-                val dk = diskKey(app)
-                dk?.let(::readDisk) ?: (loadThemed(app) ?: render(systemDrawable(app) ?: return null)).also { if (dk != null) writeDisk(dk, it) }
+            loadOverride(app)?.let { cache.put(app.key, it); return@runCatching it }
+            val dk = diskKey(app)
+            val disk = dk?.let(::readDisk)
+            if (disk != null) {
+                // Если тему успели сменить, не кладём значок прошлой темы в общий кэш
+                if (themeAtStart == iconThemeId) cache.put(app.key, disk)
+                return@runCatching disk
             }
-            cache.put(app.key, icon)
+            val sys = systemDrawable(app)
+            // Значок, снятый посреди обновления приложения, ненадёжен: система может отдать стандартный значок
+            // Android (зелёный «робот»), старую версию или значок без монохромного слоя. Такой результат
+            // показываем, но не кэшируем ни в памяти, ни на диске (иначе он остался бы до следующего обновления
+            // приложения) и перечитываем, когда обновление уляжется.
+            val pkg = app.packageName
+            val broken = sys != null && isDefaultIcon(sys)
+            val retries = brokenRetries[pkg] ?: 0
+            val sinceEvent = eventAt[pkg]?.let { SystemClock.elapsedRealtime() - it }
+            val settling = sinceEvent != null && sinceEvent < SETTLE_MS
+            val transient = settling || (broken && retries < MAX_BROKEN_RETRIES)
+            if (transient) scheduleReread(pkg, if (settling) SETTLE_MS - (sinceEvent ?: 0L) + 500L else BROKEN_RETRY_DELAY_MS, countRetry = !settling)
+            else if (!broken) brokenRetries.remove(pkg)
+            val icon = loadThemed(app, sys) ?: render(sys ?: return@runCatching null, app)
+            // Тему успели сменить, пока рисовали: этот значок принадлежит прошлой теме, в кэш его нельзя
+            if (!transient && themeAtStart == iconThemeId) {
+                if (dk != null) writeDisk(dk, icon)
+                cache.put(app.key, icon)
+            }
             icon
         }.getOrNull()
     }
 
-    // ---------- Дисковый кэш значков: на холодном старте значки читаются готовыми, а не рисуются заново ----------
+    private val retryPending = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
-    // v10: свой монохромный слой не переворачивается, у значков из набора он берётся из приложения; v9: в meta добавлен признак собственного монохромного слоя — старый кэш пересоздаётся
-    private val diskDir = File(context.cacheDir, "icons_v10")
+    /** Когда у пакета было последнее событие (установка, обновление): по нему значок считается «оседающим». */
+    private val eventAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /** Через [delayMs] перечитываем значки пакета: к этому времени обновление обычно закончено. */
+    private fun scheduleReread(pkg: String, delayMs: Long, countRetry: Boolean) {
+        if (!retryPending.add(pkg)) return
+        scope.launch(Dispatchers.Default) {
+            delay(delayMs)
+            if (countRetry) brokenRetries.merge(pkg, 1, Int::plus)
+            retryPending.remove(pkg)
+            updatedAt.remove(pkg)
+            stale += pkg
+            scheduleRefresh(0)
+        }
+    }
+
+    private fun isDefaultIcon(d: Drawable): Boolean {
+        val def = defaultIconState ?: return false
+        return d.constantState == def
+    }
+
+    // ---------- Дисковый кэш значков: на холодном старте значки читаются готовыми, а не рисуются заново ----------
 
     /** Ключ меняется вместе с темой значков, обновлением приложения и размером — устаревший файл просто не найдётся. */
     private fun diskKey(app: AppInfo): String? {
@@ -255,10 +339,14 @@ class AppRepository(
         val (legacy, custom, accent) = parts
         val monoNative = parts.getOrNull(3) == "1"
         val image = BitmapFactory.decodeFile(File(diskDir, "$key.png").path) ?: return null
+        // Файл есть, но не читается — запись оборвана: значок рисуется заново целиком, а не без монохромного слоя
         val monoFile = File(diskDir, "$key.m.png")
-        val mono = if (monoFile.exists()) BitmapFactory.decodeFile(monoFile.path)?.let { m -> m.extractAlpha().also { m.recycle() } } else null
+        val mono = if (monoFile.exists()) (BitmapFactory.decodeFile(monoFile.path) ?: return null).let { m -> m.extractAlpha().also { m.recycle() } } else null
         val fgFile = File(diskDir, "$key.f.png")
-        val fg = if (fgFile.exists()) BitmapFactory.decodeFile(fgFile.path)?.toDisplay() else null
+        val fg = if (fgFile.exists()) (BitmapFactory.decodeFile(fgFile.path) ?: return null).toDisplay() else null
+        // Давность использования для вытеснения: обновляем не чаще раза в несколько часов, чтобы не писать на каждое чтение
+        val now = System.currentTimeMillis()
+        if (now - meta.lastModified() > TOUCH_INTERVAL_MS) meta.setLastModified(now)
         AppIcon(image.toDisplay(), legacy = legacy == "1", mono = mono?.asImageBitmap(), custom = custom == "1", accent = accent.toInt(), fg = fg, monoNative = monoNative)
     }.getOrNull()
 
@@ -270,51 +358,169 @@ class AppRepository(
         runCatching {
             diskDir.mkdirs()
             val format = iconFormat()
+            // Каждый файл пишется во временный и переименовывается: два потока, рисующие один значок, и чтение
+            // посреди записи больше не видят обрезанный файл
+            fun put(name: String, bmp: Bitmap) {
+                val tmp = File(diskDir, "$name.${System.nanoTime()}.tmp")
+                try {
+                    tmp.outputStream().buffered(64 * 1024).use { bmp.compress(format, 100, it) }
+                    check(tmp.renameTo(File(diskDir, name))) { "rename failed" }
+                } finally {
+                    tmp.delete()
+                }
+            }
             val image = icon.image.asAndroidBitmap().copy(Bitmap.Config.ARGB_8888, false)
-            File(diskDir, "$key.png").outputStream().buffered(64 * 1024).use { image.compress(format, 100, it) }
+            put("$key.png", image)
             image.recycle()
+            // Если у значка нет слоя, файл прежней записи с тем же ключом не должен остаться
+            val monoFile = File(diskDir, "$key.m.png")
+            val fgFile = File(diskDir, "$key.f.png")
             icon.mono?.let { m ->
                 val src = m.asAndroidBitmap()
                 val argb = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
                 Canvas(argb).drawBitmap(src, 0f, 0f, Paint().apply { color = android.graphics.Color.BLACK })
-                File(diskDir, "$key.m.png").outputStream().buffered(64 * 1024).use { argb.compress(format, 100, it) }
+                put("$key.m.png", argb)
                 argb.recycle()
-            }
+            } ?: monoFile.delete()
             icon.fg?.let { f ->
                 val soft = f.asAndroidBitmap().copy(Bitmap.Config.ARGB_8888, false)
-                File(diskDir, "$key.f.png").outputStream().buffered(64 * 1024).use { soft.compress(format, 100, it) }
+                put("$key.f.png", soft)
                 soft.recycle()
-            }
+            } ?: fgFile.delete()
             // meta пишется последним: по нему файл считается готовым
-            File(diskDir, "$key.meta").writeText("${if (icon.legacy) 1 else 0},${if (icon.custom) 1 else 0},${icon.accent},${if (icon.monoNative) 1 else 0}")
+            val metaTmp = File(diskDir, "$key.meta.${System.nanoTime()}.tmp")
+            try {
+                metaTmp.writeText("${if (icon.legacy) 1 else 0},${if (icon.custom) 1 else 0},${icon.accent},${if (icon.monoNative) 1 else 0}")
+                check(metaTmp.renameTo(File(diskDir, "$key.meta"))) { "rename failed" }
+            } finally {
+                metaTmp.delete()
+            }
+        }
+        if (diskWrites.incrementAndGet() % TRIM_EVERY_WRITES == 0) trimDisk()
+    }
+
+    /**
+     * Держит кэш в пределах [MAX_DISK_BYTES]: сначала удаляются оборванные записи и временные файлы,
+     * затем значки, которыми давно не пользовались (удалённые приложения, прежние версии и темы).
+     */
+    private fun trimDisk() {
+        if (!trimming.compareAndSet(false, true)) return
+        try {
+            runCatching {
+                val files = diskDir.listFiles() ?: return@runCatching
+                val now = System.currentTimeMillis()
+                val groups = HashMap<String, MutableList<File>>()
+                for (f in files) {
+                    if (f.name.endsWith(".tmp")) {
+                        if (now - f.lastModified() > ORPHAN_AGE_MS) f.delete()
+                        continue
+                    }
+                    groups.getOrPut(f.name.substringBefore('.')) { ArrayList(4) }.add(f)
+                }
+                class Entry(val files: List<File>, val bytes: Long, val used: Long)
+                val entries = ArrayList<Entry>(groups.size)
+                for ((_, fs) in groups) {
+                    val used = fs.maxOf { it.lastModified() }
+                    // Без meta значок считается недописанным; свежую запись, которую пишут прямо сейчас, не трогаем
+                    if (fs.none { it.name.endsWith(".meta") } && now - used > ORPHAN_AGE_MS) { fs.forEach { it.delete() }; continue }
+                    entries += Entry(fs, fs.sumOf { it.length() }, used)
+                }
+                var total = entries.sumOf { it.bytes }
+                if (total <= MAX_DISK_BYTES) return@runCatching
+                for (e in entries.sortedBy { it.used }) {
+                    if (total <= MAX_DISK_BYTES) break
+                    e.files.forEach { it.delete() }
+                    total -= e.bytes
+                }
+            }
+        } finally {
+            trimming.set(false)
         }
     }
 
+    /** Сброс кэша значков из настроек: значки перерисуются заново. */
+    fun clearIconCache() {
+        scope.launch(Dispatchers.Default) {
+            diskDir.deleteRecursively()
+            cache.evictAll()
+            bumpEpoch()
+            preloadIcons(_apps.value)
+        }
+    }
+
+    /** Описание активности. Пока по пакету есть необработанное событие, прежнее из обхода устарело: берём свежее. */
     private fun systemDrawable(app: AppInfo): Drawable? {
-        val info = activityInfos[app.key]
+        val info = (if (app.packageName in stale) null else activityInfos[app.key])
             ?: launcherApps.getActivityList(app.packageName, app.user).firstOrNull { it.componentName.className == app.className }
         return info?.getIcon(0)
     }
 
-    private fun loadThemed(app: AppInfo): AppIcon? {
+    private fun loadThemed(app: AppInfo, sys: Drawable?): AppIcon? {
         val t = theme ?: return null
         t.iconFor(app.packageName, app.className)?.let { d ->
             val icon = renderPackIcon(d)
             // У значка из набора нет своего монохромного слоя: тематическим он становится по слою самого приложения
             if (icon.mono != null) return icon
-            val native = nativeMono(app) ?: return icon
+            val native = nativeMono(app, sys) ?: return icon
             return AppIcon(icon.image, icon.legacy, native.asImageBitmap(), icon.custom, icon.accent, icon.fg, monoNative = true)
         }
         if (!t.hasShapeTreatment) return null
-        return runCatching { composeWithTheme(t, app) }.getOrNull()
+        return runCatching { composeWithTheme(t, app, sys) }.getOrNull()
     }
 
-    /** Монохромный слой, который дало само приложение (Android 13+). */
-    private fun nativeMono(app: AppInfo): Bitmap? {
-        if (Build.VERSION.SDK_INT < 33) return null
-        val d = systemDrawable(app) as? AdaptiveIconDrawable ?: return null
-        val m = d.monochrome ?: return null
+    /** Монохромный слой, который дало само приложение. */
+    private fun nativeMono(app: AppInfo?, sys: Drawable?): Bitmap? {
+        val m = monoLayer(app, sys) ?: return null
         return runCatching { MonoSynth.fixSystem(renderLayers(iconPx, null, m, alphaOnly = true)) }.getOrNull()
+    }
+
+    /**
+     * Монохромный слой приложения. На Android 13+ его отдаёт система. На Android 8–12 тег `<monochrome>` в XML
+     * adaptive-иконки система при разборе пропускает, хотя большинство приложений (Google и не только) его уже
+     * кладут: читаем его из XML сами, как Lawnchair и Pixel Launcher на старых версиях. Без этого на Android 11
+     * все тематические значки были синтезированными, и у многих рисунок выходил кривым.
+     */
+    private fun monoLayer(app: AppInfo?, sys: Drawable?): Drawable? {
+        if (Build.VERSION.SDK_INT >= 33) return (sys as? AdaptiveIconDrawable)?.monochrome
+        if (app == null || sys !is AdaptiveIconDrawable) return null
+        return runCatching { xmlMonochrome(app) }.getOrNull()
+    }
+
+    private fun xmlMonochrome(app: AppInfo): Drawable? {
+        val pm = context.packageManager
+        val appInfo = activityInfos[app.key]?.applicationInfo ?: pm.getApplicationInfo(app.packageName, 0)
+        val iconRes = runCatching { pm.getActivityInfo(app.component, 0).iconResource }.getOrNull()?.takeIf { it != 0 } ?: appInfo.icon
+        if (iconRes == 0) return null
+        val res = pm.getResourcesForApplication(appInfo)
+        val dpi = context.resources.displayMetrics.densityDpi
+        // PNG-значок — не XML: getXml бросит исключение, и слоя просто нет
+        val parser = res.getXml(iconRes)
+        try {
+            var type = parser.next()
+            while (type != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                if (type == org.xmlpull.v1.XmlPullParser.START_TAG) {
+                    if (parser.depth == 1 && parser.name != "adaptive-icon") return null
+                    if (parser.depth == 2 && parser.name == "monochrome") {
+                        val id = parser.getAttributeResourceValue(ANDROID_NS, "drawable", 0)
+                        if (id != 0) return res.getDrawableForDensity(id, dpi, null)
+                        // Рисунок описан прямо внутри тега
+                        val depth = parser.depth
+                        while (true) {
+                            type = parser.next()
+                            if (type == org.xmlpull.v1.XmlPullParser.END_DOCUMENT) return null
+                            if (type == org.xmlpull.v1.XmlPullParser.END_TAG && parser.depth <= depth) return null
+                            if (type == org.xmlpull.v1.XmlPullParser.START_TAG) {
+                                return Drawable.createFromXmlInner(res, parser, android.util.Xml.asAttributeSet(parser), null)
+                            }
+                        }
+                    }
+                }
+                type = parser.next()
+            }
+            return null
+        } finally {
+            parser.close()
+        }
     }
 
     private fun renderPackIcon(d: Drawable): AppIcon {
@@ -326,12 +532,15 @@ class AppRepository(
     }
 
     /** Значка в теме нет: применяем её подложку, маску и накладку к обычной иконке (как в наборах ADW/Nova). */
-    private fun composeWithTheme(t: LoadedIconTheme, app: AppInfo): AppIcon? {
-        val source = systemDrawable(app) ?: return null
+    private fun composeWithTheme(t: LoadedIconTheme, app: AppInfo, sys: Drawable?): AppIcon? {
+        val source = sys ?: return null
         val s = iconPx
-        val inner = if (source is AdaptiveIconDrawable) renderLayers(s, source.background, source.foreground) else createBitmap(s, s).also {
+        val inner = if (source is AdaptiveIconDrawable) renderLayers(s, source.background, source.foreground) else {
+            val raw = createBitmap(s, s)
             source.setBounds(0, 0, s, s)
-            source.draw(Canvas(it))
+            source.draw(Canvas(raw))
+            // Плашку старого значка растягиваем на всю фигуру: с темой она иначе остаётся кружком на подложке темы
+            fullBleedArt(raw) { raw.recycle() } ?: raw
         }
         val out = createBitmap(s, s)
         val c = Canvas(out)
@@ -355,15 +564,21 @@ class AppRepository(
         return AppIcon(out.toDisplay(), legacy = false, mono = null, custom = true, accent = out.accent())
     }
 
-    private fun render(d: Drawable): AppIcon {
+    private fun render(d: Drawable, app: AppInfo? = null): AppIcon {
         val s = iconPx
         if (d is AdaptiveIconDrawable) {
             val full = renderLayers(s, d.background, d.foreground)
             val fg = renderLayers(s, null, d.foreground)
-            val native = if (Build.VERSION.SDK_INT >= 33) d.monochrome?.let { MonoSynth.fixSystem(renderLayers(s, null, it, alphaOnly = true)) } else null
+            val native = monoLayer(app, d)?.let { runCatching { MonoSynth.fixSystem(renderLayers(s, null, it, alphaOnly = true)) }.getOrNull() }
             // Синтезированный слой оставляем для «тонированных» значков Liquid Glass, тематическими он не станет
             val mono = native ?: runCatching { MonoSynth.fromAdaptive(fg, full) }.getOrNull()
             return AppIcon(full.toDisplay(), legacy = false, mono = mono?.asImageBitmap(), accent = full.accent(), fg = fg.toDisplay(), monoNative = native != null)
+        }
+        // Старый значок на своей круглой или квадратной плашке: растягиваем плашку на всю фигуру, как делает
+        // Pixel Launcher, иначе внутри формы лаунчера остаётся маленький кружок на чужом фоне
+        fullBleedLegacy(d, s)?.let { full ->
+            val mono = runCatching { MonoSynth.fromLegacy(full) }.getOrNull()
+            return AppIcon(full.toDisplay(), legacy = false, mono = mono?.asImageBitmap(), accent = full.accent())
         }
         // Обычная иконка: вписываем с полями, фон дорисует UI
         val bmp = createBitmap(s, s)
@@ -373,6 +588,95 @@ class AppRepository(
         val mono = runCatching { MonoSynth.fromLegacy(bmp) }.getOrNull()
         return AppIcon(bmp.toDisplay(), legacy = true, mono = mono?.asImageBitmap(), accent = bmp.accent())
     }
+
+    /**
+     * Старый значок, который сам — сплошной круг или скруглённый квадрат почти на всю картинку. Возвращает значок
+     * во всю фигуру: картинка увеличена так, что круг касается краёв, а углы залиты цветом края плашки.
+     * null — значок другой формы (логотип на прозрачном, пёстрый край): такой рисуется с полями, как раньше.
+     */
+    private fun fullBleedLegacy(d: Drawable, s: Int): Bitmap? = runCatching {
+        val src = createBitmap(s, s)
+        d.setBounds(0, 0, s, s)
+        d.draw(Canvas(src))
+        fullBleedArt(src) { src.recycle() }
+    }.getOrNull()
+
+    /**
+     * Растягивает плашку рисунка на весь холст, если рисунок — сплошной круг или скруглённый квадрат.
+     * Цвет края берётся по внешней кромке самой плашки: от границы рамки внутрь до первого непрозрачного пикселя.
+     * Так круг даёт ровное кольцо (выборка по описанной окружности у него попадала в прозрачные углы и цвет
+     * не находился — значки оставались кружками на чужой серой плашке).
+     * null — рисунок не плашка: логотип на прозрачном, пёстрый или неровный край.
+     */
+    private fun fullBleedArt(src: Bitmap, recycleSrc: () -> Unit = {}): Bitmap? = runCatching {
+        val s = src.width
+        if (src.height != s) return@runCatching null
+        val px = IntArray(s * s)
+        src.getPixels(px, 0, s, 0, 0, s, s)
+        var l = s; var t = s; var r = -1; var b = -1; var opaque = 0
+        for (y in 0 until s) for (x in 0 until s) {
+            if (android.graphics.Color.alpha(px[y * s + x]) <= 200) continue
+            opaque++
+            if (x < l) l = x
+            if (x > r) r = x
+            if (y < t) t = y
+            if (y > b) b = y
+        }
+        if (r < 0) return@runCatching null
+        val w = r - l + 1
+        val h = b - t + 1
+        // Плашка почти на весь значок, квадратная; заполнена сплошь (круг — π/4 ≈ 0.785 рамки)
+        if (w < s * 0.6f || h < s * 0.6f || w > h * 1.1f || h > w * 1.1f) return@runCatching null
+        val fill = opaque.toFloat() / (w * h)
+        if (fill < 0.72f) return@runCatching null
+        // Цвет края плашки — по её собственной кромке: 72 луча от края рамки к центру, первый непрозрачный пиксель
+        val cx = (l + r) / 2f
+        val cy = (t + b) / 2f
+        var sr = 0L; var sg = 0L; var sb = 0L; var n = 0
+        val rays = 72
+        val samples = IntArray(rays)
+        for (i in 0 until rays) {
+            val a = i * Math.PI * 2 / rays
+            val dx = kotlin.math.cos(a).toFloat()
+            val dy = kotlin.math.sin(a).toFloat()
+            var p = 0
+            for (step in 0..40) {
+                val k = 1.02f - step * 0.02f
+                val x = (cx + w / 2f * k * dx).toInt().coerceIn(0, s - 1)
+                val y = (cy + h / 2f * k * dy).toInt().coerceIn(0, s - 1)
+                val q = px[y * s + x]
+                if (android.graphics.Color.alpha(q) > 200) { p = q; break }
+            }
+            samples[i] = p
+            if (p != 0) {
+                sr += android.graphics.Color.red(p); sg += android.graphics.Color.green(p); sb += android.graphics.Color.blue(p); n++
+            }
+        }
+        // Логотип на прозрачном: большинство лучей не находит плашку
+        if (n < rays - 8) return@runCatching null
+        val er = (sr / n).toInt(); val eg = (sg / n).toInt(); val eb = (sb / n).toInt()
+        var spread = 0
+        for (p in samples) {
+            if (p == 0) { spread++; continue }
+            val dist = kotlin.math.abs(android.graphics.Color.red(p) - er) + kotlin.math.abs(android.graphics.Color.green(p) - eg) +
+                kotlin.math.abs(android.graphics.Color.blue(p) - eb)
+            if (dist > 60) spread++
+        }
+        // Пёстрый край (фото, градиент) не растягиваем
+        if (spread > 14) return@runCatching null
+        val out = createBitmap(s, s)
+        val c = Canvas(out)
+        c.drawColor(android.graphics.Color.rgb(er, eg, eb))
+        // Круг чуть больше значка: тонкий светлый ободок старой плашки и сглаженный край уходят за фигуру
+        val zoom = if (fill > 0.93f) 1.03f else 1.07f
+        val scale = s * zoom / maxOf(w, h)
+        val m = android.graphics.Matrix()
+        m.postTranslate(-cx, -cy)
+        m.postScale(scale, scale)
+        m.postTranslate(s / 2f, s / 2f)
+        c.drawBitmap(src, m, Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG))
+        out
+    }.getOrNull().also { if (it != null) recycleSrc() }
 
     /** Аппаратный растр не занимает кучу и рисуется без повторной загрузки текстуры. */
     private fun Bitmap.toDisplay(): ImageBitmap =
@@ -398,6 +702,8 @@ class AppRepository(
 
     private fun purgeIcons(pkg: String) {
         updatedAt.remove(pkg)
+        stale += pkg
+        eventAt[pkg] = SystemClock.elapsedRealtime()
         for (k in cache.snapshot().keys) if (k.startsWith("$pkg/")) cache.remove(k)
     }
 
@@ -419,10 +725,14 @@ class AppRepository(
 
     fun setIconTheme(id: String) {
         if (id == iconThemeId) return
-        iconThemeId = id
         themeJob?.cancel()
         themeJob = scope.launch(Dispatchers.Default) {
-            theme = if (id.isEmpty()) null else themes.load(id)
+            // Сначала загружаем набор, и только потом меняем id. Если сделать наоборот, значки, нарисованные
+            // в это время по старой теме, попадут в дисковый кэш под ключом новой и останутся там навсегда.
+            val loaded = runCatching { if (id.isEmpty()) null else themes.load(id) }.getOrNull()
+            if (!isActive) return@launch
+            theme = loaded
+            iconThemeId = id
             cache.evictAll()
             bumpEpoch()
             preloadIcons(_apps.value)
@@ -442,7 +752,7 @@ class AppRepository(
         out
     }
 
-    fun refreshThemes() { scope.launch(Dispatchers.Default) { themes.refresh() } }
+    fun refreshThemes() { scope.launch(Dispatchers.Default) { runCatching { themes.refresh() } } }
 
     // ---------- Свой значок приложения ----------
 
@@ -505,18 +815,18 @@ class AppRepository(
 
     // ---------- Запуск и действия ----------
 
-    /** Окно приложения раскрывается из [bounds]. Возвращает false, если запустить не удалось. */
     /**
-     * [portal] — анимацию рисует сам лаунчер, и приложение запускается, когда карточка-портал уже на весь экран.
-     * Окно «вырастает» из полного экрана, то есть система только проявляет его поверх карточки. Свою анимацию
-     * (makeCustomAnimation) Android 13+ для окна другой задачи не применяет. Иначе окно раскрывается системой из значка.
+     * [bounds] — прямоугольник значка, из которого раскрывается окно. Он же задаёт, куда система свернёт
+     * окно при закрытии: с этими границами закрытие идёт в значок приложения, а не «в никуда».
+     * [portal] рисует свою карточку из значка: приложение запускается, когда карточка уже на весь экран,
+     * поэтому системное раскрытие из значка видно только на её однотонном фоне.
      */
     fun launch(app: AppInfo, view: View?, bounds: Rect?, portal: Boolean = false): Boolean = runCatching {
         val opts = when {
-            portal && view != null && view.width > 0 ->
-                ActivityOptions.makeScaleUpAnimation(view, 0, 0, view.width, view.height).toBundle()
             view != null && bounds != null ->
                 ActivityOptions.makeScaleUpAnimation(view, bounds.left, bounds.top, bounds.width(), bounds.height()).toBundle()
+            portal && view != null && view.width > 0 ->
+                ActivityOptions.makeScaleUpAnimation(view, 0, 0, view.width, view.height).toBundle()
             else -> null
         }
         launcherApps.startMainActivity(app.component, app.user, bounds, opts)
@@ -624,5 +934,16 @@ class AppRepository(
         /** Сколько значков читаем заранее: остальные подгружаются при прокрутке, когда они нужны. */
         const val PRELOAD_LIMIT = 160
         const val PRELOAD_DELAY_MS = 900L
+        const val DISK_DIR_NAME = ICON_CACHE_DIR
+        const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
+        /** Потолок дискового кэша значков. */
+        const val MAX_DISK_BYTES = 100L * 1024 * 1024
+        const val TRIM_EVERY_WRITES = 150
+        const val TOUCH_INTERVAL_MS = 6L * 60 * 60 * 1000
+        const val ORPHAN_AGE_MS = 60L * 60 * 1000
+        const val MAX_BROKEN_RETRIES = 2
+        /** Столько после события пакета значок считается «оседающим» и не сохраняется. */
+        const val SETTLE_MS = 6000L
+        const val BROKEN_RETRY_DELAY_MS = 4000L
     }
 }

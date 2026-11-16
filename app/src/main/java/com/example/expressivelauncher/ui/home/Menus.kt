@@ -261,7 +261,14 @@ fun ItemMenu(
                 if (!item.inDock) add(MenuEntry(stringResource(R.string.menu_to_dock), Icons.Rounded.Home) { vm.moveToDock(item.id); onDismiss() })
                 addAll(overrides)
             }
-            ItemType.FOLDER -> add(MenuEntry(stringResource(R.string.menu_open), Icons.AutoMirrored.Rounded.OpenInNew) { onOpenFolder(item.id); onDismiss() })
+            ItemType.FOLDER -> {
+                add(MenuEntry(stringResource(R.string.menu_open), Icons.AutoMirrored.Rounded.OpenInNew) { onOpenFolder(item.id); onDismiss() })
+                // Размер папки: обычная 1×1 или большая 2×2 с сеткой 3×3 в миниатюре (в доке — только обычная)
+                if (!item.inDock) add(MenuEntry(
+                    stringResource(if (item.largeFolder) R.string.folder_make_small else R.string.folder_make_large),
+                    Icons.Rounded.Tune,
+                ) { vm.setFolderSize(item.id, !item.largeFolder); onDismiss() })
+            }
             ItemType.WIDGET -> {
                 val w = stringResource(R.string.widget_width)
                 val h = stringResource(R.string.widget_height)
@@ -428,7 +435,11 @@ private fun AccentMenuButton(icon: ImageVector, text: String, index: Int, count:
     val bottom by animateDpAsState(if (isPressed) pressedCorner else if (index == count - 1) outer else inner, spatial, label = "bottom")
     Surface(
         onClick = { haptics.play(HapticKind.CLICK, HapticGroup.TOUCH); onClick() },
-        shape = RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom),
+        shape = RoundedCornerShape(
+            // Пружина может «перелететь» за ноль: отрицательные углы Compose не принимает, и это падение
+            topStart = top.coerceAtLeast(0.dp), topEnd = top.coerceAtLeast(0.dp),
+            bottomStart = bottom.coerceAtLeast(0.dp), bottomEnd = bottom.coerceAtLeast(0.dp),
+        ),
         color = ac.field,
         contentColor = ac.onField,
         interactionSource = source,

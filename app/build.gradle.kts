@@ -13,8 +13,8 @@ android {
         targetSdk = 36
         // versionCode обязательно расти: иначе часть установщиков не ставит APK поверх уже
         // установленной версии и пишет «Приложение не установлено»
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

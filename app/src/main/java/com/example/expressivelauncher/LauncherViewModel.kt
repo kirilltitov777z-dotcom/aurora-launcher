@@ -77,6 +77,10 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private companion object {
+        const val SETTLE_AFTER_BOOT_MS = 3 * 60 * 1000L
+    }
+
     private fun clockHeight(style: ClockStyle) = if (style == ClockStyle.COMPACT) 1 else 2
 
     /** Часы — обычный элемент сетки: их можно перетащить или убрать. Размер следует за настройками. */
@@ -102,9 +106,51 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
             GridLogic.reconcile(current, installed, repo::isPackageGone)
         }
         if (cleaned != current) layout.update { GridLogic.compactPages(cleaned) }
-        // Виджет, у которого пропал поставщик, рисовал бы пустое место
-        val dead = items.value.filter { it.type == ItemType.WIDGET && widgets.info(it.widgetId) == null }.map { it.id }.toSet()
-        if (dead.isNotEmpty()) layout.update { list -> GridLogic.compactPages(list.filter { it.id !in dead }) }
+        reconcileWidgets()
+    }
+
+    private fun providerKey(info: android.appwidget.AppWidgetProviderInfo) =
+        "${info.provider.flattenToString()}#${repo.serialOf(info.profile)}"
+
+    /** Пакет поставщика, которого уже нет в системе. Неизвестный или недоступный ответ — не повод удалять виджет. */
+    private fun providerGone(provider: String): Boolean {
+        val pkg = provider.substringBefore('/').takeIf { it.isNotEmpty() } ?: return false
+        val serial = provider.substringAfter('#', "").toLongOrNull() ?: return false
+        return repo.isPackageGone(pkg, serial)
+    }
+
+    /**
+     * getAppWidgetInfo возвращает null не только у удалённого поставщика: и пока его приложение обновляется,
+     * и пока оно недоступно (загрузка системы, SD-карта, профиль без разблокировки). Раньше виджет в этот момент
+     * навсегда выпадал из раскладки. Теперь удаляем, только когда пакет поставщика действительно исчез.
+     */
+    private suspend fun reconcileWidgets() {
+        val list = items.value.filter { it.type == ItemType.WIDGET }
+        if (list.isEmpty()) return
+        val (dead, known) = withContext(Dispatchers.Default) {
+            val dead = HashSet<String>()
+            val known = HashMap<String, String>()
+            // Виджеты из прежних версий не помнят поставщика: узнаём его, пока виджет жив. Если он уже мёртв и
+            // с момента загрузки системы прошло достаточно времени, чтобы приложения успели подняться, то это
+            // осиротевший идентификатор (например, после восстановления из резервной копии)
+            val settled = android.os.SystemClock.elapsedRealtime() > SETTLE_AFTER_BOOT_MS
+            for (w in list) {
+                val info = widgets.info(w.widgetId)
+                when {
+                    info != null -> if (w.provider.isEmpty()) known[w.id] = providerKey(info)
+                    w.provider.isEmpty() -> if (settled) dead += w.id
+                    providerGone(w.provider) -> dead += w.id
+                }
+            }
+            dead to known
+        }
+        if (dead.isEmpty() && known.isEmpty()) return
+        val deadIds = list.filter { it.id in dead }.map { it.widgetId }
+        layout.update { cur ->
+            val kept = cur.filter { it.id !in dead }.map { k -> known[k.id]?.let { k.copy(provider = it) } ?: k }
+            if (dead.isEmpty()) kept else GridLogic.compactPages(kept)
+        }
+        deadIds.forEach(widgets::delete)
     }
 
     fun updateSettings(transform: (Settings) -> Settings) = settingsStore.update(transform)
@@ -258,6 +304,59 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
         list.map { if (it.id == id) it.copy(title = title) else it }
     }
 
+    /**
+     * Размер папки на столе: обычная 1×1 или большая 2×2. Большая папка получает место, как виджет:
+     * соседи расступаются, а если на странице не помещается — папка переезжает на свободное место.
+     */
+    fun setFolderSize(id: String, large: Boolean) {
+        layout.update { list ->
+            val f = list.firstOrNull { it.id == id && it.type == ItemType.FOLDER } ?: return@update list
+            val w = if (large) 2 else 1
+            val h = if (large) 2 else 1
+            if (f.w == w && f.h == h) return@update list
+            // В доке помещается только обычная папка
+            if (large && f.inDock) return@update list
+            val s = settings.value
+            val cols = if (f.inDock) s.dockCount else s.columns
+            val rows = if (f.inDock) 1 else s.rows
+            val tx = f.x.coerceIn(0, (cols - w).coerceAtLeast(0))
+            val ty = if (f.inDock) 0 else f.y.coerceIn(0, (rows - h).coerceAtLeast(0))
+            val moved = GridLogic.reflow(list, id, f.page, tx, ty, w, h, cols, rows)
+            val page: Int
+            val x: Int
+            val y: Int
+            if (moved != null) {
+                page = f.page; x = tx; y = ty
+            } else {
+                val spot = GridLogic.nearestFree(list, f.page, tx, ty, w, h, cols, rows, id)
+                if (spot != null) {
+                    page = f.page; x = spot.first; y = spot.second
+                } else {
+                    val (p, nx, ny) = GridLogic.findFree(list, cols, rows, w, h, startPage = f.page)
+                    page = p; x = nx; y = ny
+                }
+            }
+            GridLogic.compactPages(list.map {
+                when {
+                    it.id == id -> it.copy(page = page, x = x, y = y, w = w, h = h)
+                    moved?.get(it.id) != null -> moved.getValue(it.id).let { (mx, my) -> it.copy(x = mx, y = my) }
+                    else -> it
+                }
+            })
+        }
+    }
+
+    /** Сколько значков в строке открытой папки: 3, 4 или 5. 0 — автоматически по размеру папки. */
+    fun setFolderColumns(id: String, columns: Int) = layout.update { list ->
+        val value = columns.coerceIn(3, 5)
+        list.map { if (it.id == id) it.copy(folderColumns = value) else it }
+    }
+
+    /** Название под папкой на столе. */
+    fun setFolderLabel(id: String, show: Boolean) = layout.update { list ->
+        list.map { if (it.id == id) it.copy(folderLabel = show) else it }
+    }
+
     fun removeFromFolder(folderId: String, appKey: String) {
         val s = settings.value
         layout.update { list ->
@@ -284,13 +383,14 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
         if (full) com.example.expressivelauncher.ui.components.LauncherToast.show(getApplication<Application>().getString(R.string.dock_full))
     }
 
-    fun addWidget(widgetId: Int, w: Int, h: Int, page: Int) {
+    fun addWidget(widgetId: Int, info: android.appwidget.AppWidgetProviderInfo, w: Int, h: Int, page: Int) {
         val s = settings.value
+        val provider = providerKey(info)
         layout.update { list ->
             val cw = w.coerceIn(1, s.columns)
             val ch = h.coerceIn(1, s.rows)
             val (p, x, y) = GridLogic.findFree(list, s.columns, s.rows, cw, ch, startPage = page)
-            list + HomeItem(newId(), ItemType.WIDGET, p, x, y, cw, ch, widgetId = widgetId)
+            list + HomeItem(newId(), ItemType.WIDGET, p, x, y, cw, ch, widgetId = widgetId, provider = provider)
         }
     }
 
@@ -307,10 +407,10 @@ class LauncherViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Новые границы виджета (рамка изменения размера, как в One UI): соседние значки расступаются,
-     * как при перетаскивании. Возвращает false, если на странице не хватает места.
+     * Новые границы элемента (виджета или большой папки) из рамки изменения размера, как в One UI:
+     * соседние значки расступаются, как при перетаскивании. Возвращает false, если места не хватает.
      */
-    fun setWidgetBounds(id: String, x: Int, y: Int, w: Int, h: Int): Boolean {
+    fun setItemBounds(id: String, x: Int, y: Int, w: Int, h: Int): Boolean {
         val s = settings.value
         var ok = false
         layout.update { list ->

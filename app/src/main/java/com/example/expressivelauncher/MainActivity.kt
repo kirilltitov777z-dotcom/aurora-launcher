@@ -89,8 +89,11 @@ class MainActivity : ComponentActivity(), HomeActions {
     private val haptics by lazy { com.example.expressivelauncher.ui.components.Haptics(this) { vm.settings.value } }
     override var wakeSignal: Int by mutableIntStateOf(0)
     override var resumeSignal: Int by mutableIntStateOf(0)
+    override var resumeHook: (() -> Unit)? = null
+    override var defaultHomeSignal: Int by mutableIntStateOf(0)
     override var isPaused: Boolean = false
     override var pauseCount: Int = 0
+    override var hiddenSignal: Int by mutableIntStateOf(0)
     private var wallpaperLight by mutableStateOf(false)
     private var darkTheme = false
     private var accentSheet = false
@@ -184,8 +187,13 @@ class MainActivity : ComponentActivity(), HomeActions {
         val rev = vm.settings.value.customFontRev + 1
         contentResolver.openInputStream(uri)?.use { input -> tmp.outputStream().use { input.copyTo(it) } } ?: return null
         if (Typeface.Builder(tmp).build() == null) { tmp.delete(); return null }
-        filesDir.listFiles { f -> f.name.startsWith("custom_font") && f != tmp }?.forEach { it.delete() }
-        tmp.renameTo(File(filesDir, "custom_font_$rev.ttf"))
+        val dest = File(filesDir, "custom_font_$rev.ttf")
+        // Старые шрифты удаляем только после того, как новый файл готов: иначе неудачная копия
+        // оставила бы настройки со ссылкой на уже удалённый файл
+        val ok = if (tmp.renameTo(dest)) true else runCatching { tmp.copyTo(dest, overwrite = true); true }.getOrDefault(false)
+        tmp.delete()
+        if (!ok) { dest.delete(); return null }
+        filesDir.listFiles { f -> f.name.startsWith("custom_font") && f.name != dest.name }?.forEach { it.delete() }
         contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
             if (it.moveToFirst()) it.getString(0) else null
         } ?: "font"
@@ -212,6 +220,15 @@ class MainActivity : ComponentActivity(), HomeActions {
     private val bindLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val p = pendingWidget ?: return@registerForActivityResult
         if (result.resultCode == Activity.RESULT_OK) configureOrFinish(p) else cancelWidget(p)
+    }
+
+    /**
+     * Запрос роли домашнего приложения. Запускать такой intent обязательно через startActivityForResult:
+     * PermissionController определяет, кто просит роль, по getCallingPackage(), а при обычном startActivity
+     * он пустой — диалог молча закрывается (в логах «Package name cannot be null or empty»).
+     */
+    private val roleRequest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        defaultHomeSignal++
     }
 
     @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -372,6 +389,8 @@ class MainActivity : ComponentActivity(), HomeActions {
         animatorsOn = android.animation.ValueAnimator.areAnimatorsEnabled()
         if (isPaused) {
             isPaused = false
+            // До первого кадра стол уже сворачивает окно: пропущенного кадра с «уехавшим» столом нет
+            resumeHook?.invoke()
             resumeSignal++
         }
     }
@@ -383,6 +402,8 @@ class MainActivity : ComponentActivity(), HomeActions {
     }
 
     override fun onStop() {
+        // Лаунчер уходит с экрана: карточка запуска не должна остаться в снимке для обзора и шторки
+        hiddenSignal++
         unregisterReceiver(powerReceiver)
         if (Build.VERSION.SDK_INT >= 31) windowManager.removeCrossWindowBlurEnabledListener(blurListener)
         vm.widgets.stopListening()
@@ -514,7 +535,7 @@ class MainActivity : ComponentActivity(), HomeActions {
     }
 
     private fun finishWidget(p: PendingWidget) {
-        vm.addWidget(p.id, p.spanX, p.spanY, p.page)
+        vm.addWidget(p.id, p.info, p.spanX, p.spanY, p.page)
         pendingWidget = null
     }
 
@@ -615,16 +636,32 @@ class MainActivity : ComponentActivity(), HomeActions {
     }
 
     override fun openDefaultLauncherSettings() {
-        runCatching {
-            if (Build.VERSION.SDK_INT >= 29) {
-                val roles = getSystemService(RoleManager::class.java)
-                if (roles.isRoleAvailable(RoleManager.ROLE_HOME) && !roles.isRoleHeld(RoleManager.ROLE_HOME)) {
-                    startActivity(roles.createRequestRoleIntent(RoleManager.ROLE_HOME))
-                    return
-                }
+        // Android 10+: системный диалог выбора роли. Обязательно через ActivityResultLauncher, иначе
+        // PermissionController не знает, кто просит роль, и не показывает диалог вообще.
+        if (Build.VERSION.SDK_INT >= 29) {
+            val roles = runCatching { getSystemService(RoleManager::class.java) }.getOrNull()
+            val requestable = roles != null && runCatching {
+                roles.isRoleAvailable(RoleManager.ROLE_HOME) && !roles.isRoleHeld(RoleManager.ROLE_HOME)
+            }.getOrDefault(false)
+            if (requestable) {
+                val ok = runCatching {
+                    roleRequest.launch(roles!!.createRequestRoleIntent(RoleManager.ROLE_HOME))
+                }.isSuccess
+                if (ok) return
+                defaultHomeSignal++ // диалог не открылся — пробуем системные настройки
             }
-            startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
         }
+        // Экраны выбора домашнего приложения у разных оболочек разные: без запасного пути кнопка могла
+        // не делать ничего вовсе (runCatching молча глотал ActivityNotFoundException).
+        val fallbacks = listOfNotNull(
+            Intent(Settings.ACTION_HOME_SETTINGS),
+            if (Build.VERSION.SDK_INT >= 31) Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS) else null,
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)),
+        )
+        for (intent in fallbacks) {
+            if (runCatching { startActivity(intent) }.isSuccess) return
+        }
+        toast(R.string.default_unavailable)
     }
 
     override fun openAccessibilitySettings() {

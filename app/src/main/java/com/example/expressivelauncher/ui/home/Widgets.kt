@@ -4,6 +4,7 @@ package com.example.expressivelauncher.ui.home
 
 import com.example.expressivelauncher.ui.components.blurredWallpaperBackground
 import android.appwidget.AppWidgetProviderInfo
+import android.content.Context
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
@@ -155,20 +156,71 @@ private fun widgetCorner(): androidx.compose.ui.unit.Dp {
     }
 }
 
+/**
+ * Контейнер виджета: отделяет его от Compose.
+ *
+ * Виджеты сторонних приложений выполняются в нашем процессе, и их код в `onDetachedFromWindow` бывает
+ * сломан: например, часы Honor отключают уже отключённый приёмник и роняют весь лаунчер
+ * (`IllegalArgumentException: Receiver not registered`). Отвязку детей ([dispatchDetachedFromWindow])
+ * и удаление View перехватываем: исключение сломанного виджета остаётся внутри контейнера.
+ */
+private class WidgetBox(context: Context) : android.widget.FrameLayout(context) {
+    var hostView: View? = null
+
+    override fun onDetachedFromWindow() {
+        // Детей отвязываем сами, по одному: сломанный виджет (например, часы Honor, отключающие уже
+        // отключённый приёмник) упадёт только здесь, а исключение останется внутри контейнера
+        for (i in childCount - 1 downTo 0) {
+            val child = getChildAt(i) ?: continue
+            runCatching { super.removeView(child) }
+        }
+        runCatching { super.onDetachedFromWindow() }
+    }
+
+    override fun removeView(view: View?) {
+        runCatching { super.removeView(view) }
+    }
+
+    override fun removeViewInLayout(view: View?) {
+        runCatching { super.removeViewInLayout(view) }
+    }
+
+    override fun removeViewsInLayout(start: Int, count: Int) {
+        runCatching { super.removeViewsInLayout(start, count) }
+    }
+
+    override fun removeAllViews() {
+        runCatching { super.removeAllViews() }
+    }
+
+    override fun removeAllViewsInLayout() {
+        runCatching { super.removeAllViewsInLayout() }
+    }
+}
+
 @Composable
 private fun WidgetView(item: HomeItem, holder: WidgetHolder, modifier: Modifier, glint: GlintSpec? = null) {
     val density = LocalDensity.current
     var sizeDp by remember { mutableStateOf(0 to 0) }
     val corner = widgetCorner()
-    val cornerPx = with(density) { corner.toPx() }
     AndroidView(
-        factory = { ctx -> holder.createView(ctx, item.widgetId) ?: View(ctx) },
+        factory = { ctx ->
+            val box = WidgetBox(ctx)
+            // Виджет всегда в своём контейнере: если Compose заберёт View, упадёт только контейнер
+            box.hostView = holder.createView(ctx, item.widgetId) ?: View(ctx)
+            box.addView(box.hostView, android.widget.FrameLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            ))
+            box
+        },
         modifier = modifier
-            .clip(androidx.compose.foundation.shape.RoundedCornerShape(corner))
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(corner.coerceAtLeast(0.dp)))
             .onSizeChanged { sizeDp = with(density) { it.width.toDp().value.toInt() to it.height.toDp().value.toInt() } },
         // View живёт в кэше дольше композиции: при выходе из неё ничего не разрушаем
         onRelease = { },
-        update = { v ->
+        update = { box ->
+            val v = (box as? WidgetBox)?.hostView ?: box
             // Блики по контуру виджета, как у значков: эффект рендера на самом View находит край фигуры
             // по прозрачности его пикселей — у фигурных часов и погоды кромка повторяет фигуру
             if (Build.VERSION.SDK_INT >= 33) {

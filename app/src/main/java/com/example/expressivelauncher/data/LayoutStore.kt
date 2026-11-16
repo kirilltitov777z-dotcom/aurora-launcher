@@ -87,6 +87,9 @@ class LayoutStore(context: Context, private val scope: CoroutineScope) {
                 if (i.title.isNotEmpty()) put("n", i.title)
                 if (i.children.isNotEmpty()) put("c", JSONArray(i.children))
                 if (i.widgetId >= 0) put("wid", i.widgetId)
+                if (i.provider.isNotEmpty()) put("pv", i.provider)
+                if (i.folderColumns != 0) put("fc", i.folderColumns)
+                if (!i.folderLabel) put("fl", false)
             })
         }
         return JSONObject().put("v", 1).put("items", arr).toString()
@@ -107,6 +110,9 @@ class LayoutStore(context: Context, private val scope: CoroutineScope) {
                 title = o.optString("n"),
                 children = if (c == null) emptyList() else List(c.length()) { c.getString(it) },
                 widgetId = o.optInt("wid", -1),
+                provider = o.optString("pv"),
+                folderColumns = o.optInt("fc", 0),
+                folderLabel = o.optBoolean("fl", true),
             )
         }.getOrNull() }
     }

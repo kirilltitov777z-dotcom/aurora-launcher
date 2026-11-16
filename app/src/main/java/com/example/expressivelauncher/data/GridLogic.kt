@@ -215,7 +215,8 @@ object GridLogic {
         if (item.type != ItemType.FOLDER) return item
         return when (item.children.size) {
             0 -> null
-            1 -> item.copy(type = ItemType.APP, appKey = item.children[0], children = emptyList(), title = "")
+            // Большая папка (2×2) с одним приложением становится обычным значком, а не гигантским
+            1 -> item.copy(type = ItemType.APP, appKey = item.children[0], children = emptyList(), title = "", w = 1, h = 1)
             else -> item
         }
     }

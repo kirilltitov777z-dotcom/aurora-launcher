@@ -39,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -67,7 +68,6 @@ import com.example.expressivelauncher.ui.settings.BlobBadge
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
-import java.util.Locale
 
 @Composable
 private fun rememberTime(refreshKey: Int): Pair<Date, Boolean> {
@@ -75,8 +75,10 @@ private fun rememberTime(refreshKey: Int): Pair<Date, Boolean> {
     var now by remember { mutableStateOf(Date()) }
     // 12/24-часовой режим — тоже состояние: система читается один раз в минуту, а не на каждую рекомпозицию
     var is24 by remember { mutableStateOf(DateFormat.is24HourFormat(context)) }
-    // При возвращении на стол время обновляем сразу: пока процесс был заморожен, тики могли не приходить
-    remember(refreshKey) { now = Date() }
+    // При возвращении на стол время обновляем сразу: пока процесс был заморожен, тики могли не приходить.
+    // Именно LaunchedEffect, а не remember: запись состояния прямо в композиции — это побочный эффект,
+    // из-за которого кадр мог пересобираться лишний раз.
+    LaunchedEffect(refreshKey) { now = Date() }
     DisposableEffect(context) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(c: Context?, i: Intent?) {
@@ -126,7 +128,8 @@ private fun rememberBattery(): State<Pair<Int, Boolean>> {
 fun ClockCard(style: ClockStyle, refreshKey: Int) {
     val s = LocalSettings.current
     val (now, is24) = rememberTime(refreshKey)
-    val locale = Locale.getDefault()
+    // Локаль из конфигурации: при смене языка меняется и она, и композиция пересобирается
+    val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
     // Форматтеры пересоздаются только при смене языка или 12/24-часового режима, а не три раза в минуту
     val hoursFormat = remember(locale, is24) { SimpleDateFormat(if (is24) "HH" else "h", locale) }
     val minutesFormat = remember(locale) { SimpleDateFormat("mm", locale) }

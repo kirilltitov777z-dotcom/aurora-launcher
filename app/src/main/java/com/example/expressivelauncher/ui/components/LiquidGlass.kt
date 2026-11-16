@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitEachGesture
 
 import android.app.WallpaperManager
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
@@ -422,6 +423,7 @@ fun LiquidSurface(
  * секции и карточки настроек, строка поиска меню приложений, карточки онбординга (через [glassEdge]).
  * Содержимое не обрезается — это делает тот, кто вызывает.
  */
+@SuppressLint("NewApi") // RuntimeShader используется только под проверкой Build.VERSION.SDK_INT >= 33
 @Composable
 fun Modifier.liquidGlass(
     shape: Shape,

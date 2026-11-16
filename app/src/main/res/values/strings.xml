@@ -23,6 +23,12 @@
     <string name="menu_add_home">Add to home</string>
     <string name="menu_to_dock">Move to dock</string>
     <string name="menu_take_out">Take out of folder</string>
+    <string name="folder_large">Large folder</string>
+    <string name="folder_make_large">Make large</string>
+    <string name="folder_make_small">Make compact</string>
+    <string name="folder_columns">Icons per row</string>
+    <string name="folder_show_name">Name on home screen</string>
+    <string name="folder_settings">Folder settings</string>
     <string name="menu_select_more">Select more</string>
     <string name="selection_count">Selected: %d</string>
     <string name="selection_remove">Remove selected</string>
@@ -453,4 +459,8 @@
     <string name="dock_full">The dock is full: drag an icon out of it first</string>
     <string name="sb_show">Show search bar</string>
     <string name="sb_hint_engine">Search %1$s</string>
+    <string name="storage_title">Storage</string>
+    <string name="storage_clear_icons">Clear icon cache</string>
+    <string name="storage_cleared">Icon cache cleared</string>
+    <string name="default_unavailable">Couldn\'t open launcher settings</string>
 </resources>

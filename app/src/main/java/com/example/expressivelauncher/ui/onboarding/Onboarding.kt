@@ -519,7 +519,7 @@ private fun ColumnScope.DefaultHomeStep(actions: HomeActions) {
     val cs = MaterialTheme.colorScheme
     val focused = LocalWindowInfo.current.isWindowFocused
     var isDefault by remember { mutableStateOf(Permissions.isDefaultHome(context)) }
-    LaunchedEffect(focused) { if (focused) isDefault = Permissions.isDefaultHome(context) }
+    LaunchedEffect(focused, actions.defaultHomeSignal) { isDefault = Permissions.isDefaultHome(context) }
     StepHeader(R.string.onb_default_title, R.string.onb_default_sub)
     GroupItem {
         Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
