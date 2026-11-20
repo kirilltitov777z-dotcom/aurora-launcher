@@ -210,7 +210,7 @@
     <string name="dock_radius">Dock corner radius</string>
     <string name="label_size">Label size</string>
     <string name="about_hint">Version, permissions, device</string>
-    <string name="about_desc">Aurora Launcher — a home screen with five visual themes, custom icon shapes, colors, gestures and a fast app drawer. Fork of Expressive Launcher v1.3.</string>
+    <string name="about_desc">Aurora Launcher — a home screen with five looks, live colors, gestures and a fast app drawer. Your home, your rules.</string>
     <plurals name="hidden_count">
         <item quantity="one">%d hidden</item>
         <item quantity="other">%d hidden</item>
@@ -339,8 +339,7 @@
     <string name="perm_background_hint">Your system may stop badges and gestures in the background: allow autostart</string>
     <string name="device">Device</string>
     <string name="import_settings_done">Settings and layout restored</string>
-    <string name="author">Author:</string>
-    <string name="channel">Channel:</string>
+    <string name="about_footer">Aurora Launcher · your style, your rules</string>
     <string name="crash_title">Crash report</string>
     <string name="crash_hint">The launcher crashed or was closed by the system. Send this report to the developer so the cause can be fixed.</string>
     <string name="crash_send">Send report</string>
@@ -368,13 +367,13 @@
     <string name="sb_gemini">Gemini</string>
     <!-- Темы -->
     <string name="set_themes">Themes</string>
-    <string name="set_themes_hint">Liquid Glass, Material 3 Expressive, Lite, Aurora, Neon</string>
+    <string name="set_themes_hint">Glass, Pulse, Lite, Aurora, Neon</string>
     <string name="themes_choose">Theme</string>
-    <string name="theme_glass">Liquid Glass</string>
+    <string name="theme_glass">Glass</string>
     <string name="theme_glass_tagline">Glass and blur</string>
-    <string name="theme_expressive">Material 3 Expressive</string>
+    <string name="theme_expressive">Pulse</string>
     <string name="theme_expressive_tagline">Bold shapes and motion</string>
-    <string name="theme_lite">Material You Lite</string>
+    <string name="theme_lite">Lite</string>
     <string name="theme_lite_tagline">Simple and fast</string>
     <string name="theme_aurora">Aurora</string>
     <string name="theme_aurora_tagline">Glowing glass and colorful walls</string>
@@ -477,4 +476,12 @@
     <string name="storage_clear_icons">Clear icon cache</string>
     <string name="storage_cleared">Icon cache cleared</string>
     <string name="default_unavailable">Couldn\'t open launcher settings</string>
+
+    <string name="ready_widgets">Ready widgets</string>
+    <string name="ready_widget_clock">Clock, date and battery</string>
+    <string name="ready_widget_clock_hint">Large clock across the grid plus the search bar</string>
+    <string name="ready_widget_compact">Compact clock</string>
+    <string name="ready_widget_compact_hint">A small clock without the battery row</string>
+    <string name="ready_widget_clean">Clean home</string>
+    <string name="ready_widget_clean_hint">Only the search bar, no clock</string>
 </resources>

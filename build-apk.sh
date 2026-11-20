@@ -10,5 +10,5 @@ if [ ! -f "$APK" ]; then
   echo "APK не найден: $APK" >&2
   exit 1
 fi
-cp "$APK" ./AuroraLauncher-2.1.apk
-echo "Готово: $(pwd)/AuroraLauncher-2.1.apk"
+cp "$APK" ./AuroraLauncher-2.2.apk
+echo "Готово: $(pwd)/AuroraLauncher-2.2.apk"

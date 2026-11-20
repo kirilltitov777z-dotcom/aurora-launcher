@@ -147,7 +147,7 @@ data class Settings(
     val customFontRev: Int = 0,
     // Иконки
     val iconShape: IconShape = IconShape.COOKIE_9,
-    val iconScale: Float = 1f,
+    val iconScale: Float = 1.12f, // значки крупнее: занимают больше ячейки, в том числе внутри папок
     // Форк: значки сразу носят цвета темы. Раньше по умолчанию было false, из-за чего перекраска не включалась.
     val themedIcons: Boolean = true,
     val duotoneIcons: Boolean = false, // устарело: объединено с themedIcons, читается только при переносе настроек

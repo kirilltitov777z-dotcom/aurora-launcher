@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aurora.launcher.LauncherViewModel
 import com.aurora.launcher.R
+import com.aurora.launcher.data.ClockStyle
 import com.aurora.launcher.data.ColorSource
 import com.aurora.launcher.data.GlassIconStyle
 import com.aurora.launcher.data.IconHighlight
@@ -94,7 +95,33 @@ fun ThemesPage(vm: LauncherViewModel) {
         ThemeCards(s.style, s) { spec -> switch { vm.updateSettings { it.copy(style = spec.style) } } }
     }
     ThemeOptionsSection(vm, LauncherThemes.of(s.style))
+    SettingsSection(stringResource(R.string.ready_widgets)) { ReadyWidgetsSection(vm) }
     SettingsSection(stringResource(R.string.appearance_mode)) { ThemeModeItem(vm) }
+}
+
+/** Готовые наборы встроенных виджетов стола: один тап — и нужные элементы уже на месте. */
+@Composable
+private fun ReadyWidgetsSection(vm: LauncherViewModel) {
+    ActionItem(
+        Icons.Rounded.Lightbulb, stringResource(R.string.ready_widget_clock),
+        stringResource(R.string.ready_widget_clock_hint),
+    ) {
+        vm.updateSettings {
+            it.copy(clockStyle = ClockStyle.BIG, showDate = true, showBattery = true, showSearchPill = true)
+        }
+    }
+    ActionItem(
+        Icons.Rounded.Opacity, stringResource(R.string.ready_widget_compact),
+        stringResource(R.string.ready_widget_compact_hint),
+    ) {
+        vm.updateSettings { it.copy(clockStyle = ClockStyle.COMPACT, showBattery = false) }
+    }
+    ActionItem(
+        Icons.Rounded.Search, stringResource(R.string.ready_widget_clean),
+        stringResource(R.string.ready_widget_clean_hint),
+    ) {
+        vm.updateSettings { it.copy(clockStyle = ClockStyle.OFF, showSearchPill = true) }
+    }
 }
 
 /** Карточки трёх тем с живым мини-столом в каждой; выбранная отмечена. */

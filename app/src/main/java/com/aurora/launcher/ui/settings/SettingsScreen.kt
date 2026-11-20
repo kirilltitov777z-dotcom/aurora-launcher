@@ -1009,41 +1009,9 @@ private fun BackupPage(actions: HomeActions) {
     }
 }
 
-/** Автор и канал — синие ссылки на Telegram (как в Expressive Keyboard). */
-@Composable
-private fun AuthorLine() {
-    val context = LocalContext.current
-    val blue = Color(0xFF2AABEE)
-    val label = MaterialTheme.typography.bodyMedium
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    @Composable
-    fun Link(title: String, handle: String) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(title, style = label, color = muted, maxLines = 1, softWrap = false)
-            Text(
-                "@$handle", style = label, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = blue, maxLines = 1, softWrap = false,
-                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
-                    runCatching {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://t.me/$handle")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    }
-                }.padding(horizontal = 6.dp, vertical = 4.dp),
-            )
-        }
-    }
-    Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Link(stringResource(R.string.author), "Shahedeer")
-        Link(stringResource(R.string.channel), "materialyouboss")
-    }
-}
-
 @Composable
 private fun AboutPage(actions: HomeActions) {
     AboutCard()
-    AuthorLine()
     StorageSection()
     CrashSection()
     PermissionsSection(actions)
@@ -1146,6 +1114,7 @@ private fun AboutCard() {
         Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmallEmphasized, color = cs.onPrimaryContainer)
         Text(stringResource(R.string.version, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.labelLarge, color = cs.onPrimaryContainer.copy(alpha = 0.8f))
         Text(stringResource(R.string.about_desc), style = MaterialTheme.typography.bodyMedium, color = cs.onPrimaryContainer, modifier = Modifier.padding(top = 4.dp))
+        Text(stringResource(R.string.about_footer), style = MaterialTheme.typography.labelMedium, color = cs.onPrimaryContainer.copy(alpha = 0.85f))
     }
 }
 

@@ -48,23 +48,23 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AuroraLauncher-2.1-apk
+          name: AuroraLauncher-2.2-apk
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.1
-          name: Aurora Launcher v2.1 — full redesign
+          tag_name: v2.2
+          name: Aurora Launcher v2.2
           body: |
-            Full redesign of the Expressive Launcher v1.3 fork.
+            Aurora Launcher v2.2 — own identity, no original author links.
 
-            - 3-tab home menu: Home / Style / Actions (quick theme, accent, tint toggles)
-            - Icons are tinted with the palette by default
-            - Brand-new app icon: geometric "A" with an aurora star
-            - 5 themes, 28 accent colors, own icon masks per theme
-            - Bug fixes: wallpaper picker, grid placement, settings import
+            - New logo: glowing aurora ring with a sparkle, all densities redrawn
+            - Author and channel links removed from About; settings fully rebranded
+            - Themes renamed: Glass, Pulse, Lite, Aurora, Neon
+            - Ready widgets presets in Themes settings (clock, compact, clean home)
+            - Larger icons by default, 3-tab menu, palette-tinted icons
           files: app/build/outputs/apk/release/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

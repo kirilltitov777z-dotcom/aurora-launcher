@@ -1,10 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Собственный знак форка: геометрическая «A» и звезда северного сияния. -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp" android:height="108dp"
-    android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="@color/ic_launcher_face" android:pathData="M31,84L50,26L62,26L45,84Z"/>
-    <path android:fillColor="@color/ic_launcher_face" android:pathData="M50,26L62,26L83,84L69,84Z"/>
-    <path android:fillColor="@color/ic_launcher_ink" android:pathData="M40,60L72,60L76,71L36,71Z"/>
-    <path android:fillColor="#FF8BE9D7" android:pathData="M78,17L80.6,24.4L88,27L80.6,29.6L78,37L75.4,29.6L68,27L75.4,24.4Z"/>
-</vector>
+<!-- Знак форка: светящееся кольцо авроры с искрой. Растр без фона, фон задаётся отдельным слоем. -->
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@drawable/ic_launcher_foreground_art"
+    android:gravity="center" />

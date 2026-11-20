@@ -212,7 +212,7 @@
     <string name="dock_radius">Скругление дока</string>
     <string name="label_size">Размер подписей</string>
     <string name="about_hint">Версия, разрешения, устройство</string>
-    <string name="about_desc">Aurora Launcher — домашний экран с пятью визуальными темами, своими формами иконок, цветами, жестами и быстрым списком приложений. Форк Expressive Launcher v1.3.</string>
+    <string name="about_desc">Aurora Launcher — домашний экран с пятью образами, живыми цветами, жестами и быстрым списком приложений. Твой стол — твои правила.</string>
     <plurals name="hidden_count">
         <item quantity="one">Скрыто: %d</item>
         <item quantity="few">Скрыто: %d</item>
@@ -343,8 +343,7 @@
     <string name="perm_background_hint">Оболочка может останавливать бейджи и жесты в фоне — разрешите автозапуск</string>
     <string name="device">Устройство</string>
     <string name="import_settings_done">Настройки и раскладка восстановлены</string>
-    <string name="author">Автор:</string>
-    <string name="channel">Канал:</string>
+    <string name="about_footer">Aurora Launcher · твой стиль, твои правила</string>
     <string name="crash_title">Отчёт о сбоях</string>
     <string name="crash_hint">Лаунчер падал или его закрывала система. Отправьте отчёт разработчику — по нему можно найти причину.</string>
     <string name="crash_send">Отправить отчёт</string>
@@ -372,13 +371,13 @@
     <string name="sb_gemini">Gemini</string>
     <!-- Темы -->
     <string name="set_themes">Темы</string>
-    <string name="set_themes_hint">Liquid Glass, Material 3 Expressive, Lite, Aurora, Neon</string>
+    <string name="set_themes_hint">Стекло, Импульс, Лайт, Аврора, Неон</string>
     <string name="themes_choose">Тема</string>
-    <string name="theme_glass">Liquid Glass</string>
+    <string name="theme_glass">Стекло</string>
     <string name="theme_glass_tagline">Стекло и размытие</string>
-    <string name="theme_expressive">Material 3 Expressive</string>
+    <string name="theme_expressive">Импульс</string>
     <string name="theme_expressive_tagline">Яркие формы и анимации</string>
-    <string name="theme_lite">Material You Lite</string>
+    <string name="theme_lite">Лайт</string>
     <string name="theme_lite_tagline">Просто и быстро</string>
     <string name="theme_aurora">Аврора</string>
     <string name="theme_aurora_tagline">Светящееся стекло и цветные обои</string>
@@ -481,4 +480,12 @@
     <string name="storage_clear_icons">Очистить кэш значков</string>
     <string name="storage_cleared">Кэш значков очищен</string>
     <string name="default_unavailable">Не удалось открыть настройки лаунчера</string>
+
+    <string name="ready_widgets">Готовые виджеты</string>
+    <string name="ready_widget_clock">Часы, дата и батарея</string>
+    <string name="ready_widget_clock_hint">Крупные часы на всю ширину сетки и строка поиска</string>
+    <string name="ready_widget_compact">Компактные часы</string>
+    <string name="ready_widget_compact_hint">Маленькие часы без строки батареи</string>
+    <string name="ready_widget_clean">Чистый стол</string>
+    <string name="ready_widget_clean_hint">Только строка поиска, без часов</string>
 </resources>
