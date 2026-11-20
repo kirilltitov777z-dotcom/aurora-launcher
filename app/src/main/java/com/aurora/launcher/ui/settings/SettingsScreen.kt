@@ -331,8 +331,6 @@ private fun MainPage(vm: LauncherViewModel, actions: HomeActions, onClose: () ->
     }
     var query by rememberSaveable { mutableStateOf("") }
 
-    // Автор и канал — сверху, как в Expressive Keyboard
-    AuthorLine()
     // Поле поиска в стиле поисковой строки M3: заполненная «таблетка» без рамки
     val searchBg = panelColor(MaterialTheme.colorScheme.surfaceBright)
     TextField(
