@@ -3,7 +3,15 @@
 package com.aurora.launcher.ui.home
 
 import com.aurora.launcher.ui.theme.accentColors
+import com.aurora.launcher.ui.theme.LauncherThemes
+import com.aurora.launcher.ui.theme.SeedColors
+import com.aurora.launcher.ui.theme.rememberThemeSwitch
+import com.aurora.launcher.data.ColorSource
 import android.content.pm.ShortcutInfo
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.border
+import androidx.compose.material3.FilterChip
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -40,6 +48,8 @@ import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DropdownMenuItem
@@ -69,6 +79,7 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -336,12 +347,14 @@ fun DrawerAppMenu(
 const val MENU_GUARD_MS = 350L
 
 /**
- * Меню долгого нажатия на пустом месте — по приёмам Expressive: одно главное действие (виджеты) крупнее
- * и залито основным цветом, остальные тональные и круглые — контраст цвета и формы задаёт иерархию.
+ * Новое меню стола: три вкладки в одной панели — «Главное», «Оформление», «Действия».
+ * Панель одинаково выглядит во всех темах и даёт быстрый доступ к настройкам без ухода в настройки.
  */
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun AnimatedVisibilityScope.HomeMenu(
+    vm: LauncherViewModel,
+    actions: HomeActions,
     onDismiss: () -> Unit,
     onWidgets: () -> Unit,
     onWallpaper: () -> Unit,
@@ -350,8 +363,6 @@ fun AnimatedVisibilityScope.HomeMenu(
 ) {
     val cs = MaterialTheme.colorScheme
     val spec = com.aurora.launcher.ui.theme.LocalThemeSpec.current
-    // Меню появляется, пока палец ещё на экране: случайное касание ладонью или вторым пальцем
-    // в первые мгновения не должно его закрывать
     val openedAt = remember { android.os.SystemClock.uptimeMillis() }
     Box(
         Modifier.fillMaxSize().background(cs.scrim.copy(alpha = if (spec.accentChrome) 0.45f else 0.32f)).clickable(interactionSource = null, indication = null) {
@@ -363,81 +374,190 @@ fun AnimatedVisibilityScope.HomeMenu(
         exit = slideOutVertically(MaterialTheme.motionScheme.fastSpatialSpec()) { it },
     )
     Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.navigationBars), contentAlignment = Alignment.BottomCenter) {
-        if (spec.accentChrome) {
-            AccentHomeMenu(onWidgets, onWallpaper, onThemes, onSettings, Modifier.padding(horizontal = 12.dp, vertical = 4.dp).widthIn(max = 480.dp).fillMaxWidth().then(slide))
-            return@Box
-        }
-        ThemedSurface(
-            shape = MaterialTheme.shapes.extraLargeIncreased,
-            color = cs.surfaceContainer,
-            contentColor = cs.onSurface,
-            shadowElevation = 3.dp,
-            modifier = Modifier.padding(16.dp).fillMaxWidth().then(slide),
-        ) {
-            // Liquid Glass: три одинаковые стеклянные плитки, как в iOS; в Lite главная — крупнее и залита цветом
-            val glassTheme = spec.glass
-            Row(Modifier.padding(12.dp).height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                HomeMenuTile(
-                    Icons.Rounded.Widgets, stringResource(R.string.home_widgets), cs.primary, cs.onPrimary,
-                    rest = 28.dp, pressed = 16.dp, emphasized = !glassTheme, onClick = onWidgets,
-                    modifier = Modifier.weight(if (glassTheme) 1f else 1.4f).fillMaxHeight().staggerIn(0),
-                )
-                HomeMenuTile(
-                    Icons.Rounded.Wallpaper, stringResource(R.string.home_wallpaper), cs.secondaryContainer, cs.onSecondaryContainer,
-                    rest = 28.dp, pressed = 16.dp, emphasized = false, onClick = onWallpaper,
-                    modifier = Modifier.weight(1f).fillMaxHeight().staggerIn(1),
-                )
-                HomeMenuTile(
-                    Icons.Rounded.Palette, stringResource(R.string.home_themes), cs.primaryContainer, cs.onPrimaryContainer,
-                    rest = 28.dp, pressed = 16.dp, emphasized = false, onClick = onThemes,
-                    modifier = Modifier.weight(1f).fillMaxHeight().staggerIn(2),
-                )
-                HomeMenuTile(
-                    Icons.Rounded.Settings, stringResource(R.string.home_settings), cs.tertiaryContainer, cs.onTertiaryContainer,
-                    rest = 28.dp, pressed = 16.dp, emphasized = false, onClick = onSettings,
-                    modifier = Modifier.weight(1f).fillMaxHeight().staggerIn(3),
-                )
-            }
-        }
+        TabbedHomeMenu(
+            vm, actions, onWidgets, onWallpaper, onThemes, onSettings,
+            Modifier.padding(horizontal = 12.dp, vertical = 4.dp).widthIn(max = 520.dp).fillMaxWidth().then(slide),
+        )
     }
 }
 
-/**
- * Меню стола в Expressive: насыщенная панель тёмного тона акцента со свечением, внутри — три кнопки во всю
- * ширину, собранные в группу (снаружи крупные углы 28 dp, на стыках 8 dp, как у сгруппированных кнопок M3
- * Expressive). Кнопка под пальцем скругляется сильнее — морфинг формы. Размеры — как у кнопки Medium/Large:
- * высота 72 dp, значок 28 dp, подпись titleLarge.
- */
 @Composable
-private fun AccentHomeMenu(
+private fun TabbedHomeMenu(
+    vm: LauncherViewModel,
+    actions: HomeActions,
     onWidgets: () -> Unit,
     onWallpaper: () -> Unit,
     onThemes: () -> Unit,
     onSettings: () -> Unit,
     modifier: Modifier,
 ) {
-    val ac = accentColors()
-    val shape = RoundedCornerShape(36.dp)
-    val s = LocalSettings.current
-    val blurUnder = s.blurEverywhere && s.blurBackground && s.blurStrength > 0f && LocalFx.current.blur && android.os.Build.VERSION.SDK_INT >= 31
-    Box(
-        modifier
-            .accentGlow(shape)
-            .clip(shape)
-            // Полупрозрачная — только поверх размытия («Размытие везде»), иначе сквозь неё читался бы док
-            .background(ac.panel.copy(alpha = if (blurUnder) 0.78f else 0.97f))
-            .padding(8.dp),
+    val cs = MaterialTheme.colorScheme
+    val spec = com.aurora.launcher.ui.theme.LocalThemeSpec.current
+    val s by vm.settings.collectAsState()
+    val switch = rememberThemeSwitch()
+    var tab by remember { mutableStateOf(0) }
+    val shape = RoundedCornerShape(32.dp)
+    val panel = if (spec.accentChrome) accentColors().panel.copy(alpha = 0.97f) else cs.surfaceContainer
+    ThemedSurface(
+        shape = shape,
+        color = panel,
+        contentColor = cs.onSurface,
+        shadowElevation = 3.dp,
+        modifier = modifier.accentGlow(shape),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            val items = listOf(
-                Triple(Icons.Rounded.Widgets, R.string.home_widgets, onWidgets),
-                Triple(Icons.Rounded.Wallpaper, R.string.home_wallpaper, onWallpaper),
-                Triple(Icons.Rounded.Palette, R.string.home_themes, onThemes),
-                Triple(Icons.Rounded.Settings, R.string.home_settings, onSettings),
-            )
-            items.forEachIndexed { i, (icon, label, click) ->
-                AccentMenuButton(icon, stringResource(label), i, items.size, click, Modifier.staggerIn(i))
+        Column(Modifier.padding(12.dp)) {
+            Text(stringResource(R.string.home_menu_title), style = MaterialTheme.typography.titleMedium, color = cs.onSurface)
+            Spacer(Modifier.size(10.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val labels = listOf(R.string.menu_tab_main, R.string.menu_tab_style, R.string.menu_tab_actions)
+                labels.forEachIndexed { i, label ->
+                    FilterChip(
+                        selected = tab == i,
+                        onClick = { tab = i },
+                        label = {
+                            Text(
+                                stringResource(label), style = MaterialTheme.typography.labelLarge,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
+            Spacer(Modifier.size(12.dp))
+            AnimatedContent(tab, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "homeMenuTab") { t ->
+                when (t) {
+                    0 -> MenuMainTab(spec.glass, onWidgets, onWallpaper, onThemes, onSettings)
+                    1 -> MenuStyleTab(vm, switch, s, onThemes)
+                    2 -> MenuActionsTab(actions, onWidgets, onWallpaper, onThemes, onSettings)
+                }
+            }
+        }
+    }
+}
+
+/** Первая вкладка: четыре крупных действия, которые были в старом меню. */
+@Composable
+private fun MenuMainTab(
+    glass: Boolean,
+    onWidgets: () -> Unit,
+    onWallpaper: () -> Unit,
+    onThemes: () -> Unit,
+    onSettings: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        HomeMenuTile(Icons.Rounded.Widgets, stringResource(R.string.home_widgets), cs.primary, cs.onPrimary,
+            rest = 28.dp, pressed = 16.dp, emphasized = !glass, onClick = onWidgets,
+            modifier = Modifier.weight(1f).fillMaxHeight().staggerIn(0))
+        HomeMenuTile(Icons.Rounded.Wallpaper, stringResource(R.string.home_wallpaper), cs.secondaryContainer, cs.onSecondaryContainer,
+            rest = 28.dp, pressed = 16.dp, emphasized = false, onClick = onWallpaper,
+            modifier = Modifier.weight(1f).fillMaxHeight().staggerIn(1))
+        HomeMenuTile(Icons.Rounded.Palette, stringResource(R.string.home_themes), cs.primaryContainer, cs.onPrimaryContainer,
+            rest = 28.dp, pressed = 16.dp, emphasized = false, onClick = onThemes,
+            modifier = Modifier.weight(1f).fillMaxHeight().staggerIn(2))
+        HomeMenuTile(Icons.Rounded.Settings, stringResource(R.string.home_settings), cs.tertiaryContainer, cs.onTertiaryContainer,
+            rest = 28.dp, pressed = 16.dp, emphasized = false, onClick = onSettings,
+            modifier = Modifier.weight(1f).fillMaxHeight().staggerIn(3))
+    }
+}
+
+/** Вторая вкладка: переключение темы, акцента и двух видимых переключателей прямо на столе. */
+@Composable
+private fun MenuStyleTab(
+    vm: LauncherViewModel,
+    switch: (apply: () -> Unit) -> Unit,
+    s: com.aurora.launcher.data.Settings,
+    onThemes: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(stringResource(R.string.home_themes), style = MaterialTheme.typography.labelLarge, color = cs.onSurface)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            for (spec in LauncherThemes.all) {
+                FilterChip(
+                    selected = s.style == spec.style,
+                    onClick = { switch { vm.updateSettings { it.copy(style = spec.style) } } },
+                    label = { Text(stringResource(spec.title), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    leadingIcon = { Icon(spec.icon, null, Modifier.size(16.dp)) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        Text(stringResource(R.string.menu_quick_accent), style = MaterialTheme.typography.labelLarge, color = cs.onSurface)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (c in SeedColors.take(10)) {
+                val selected = s.seedColor == c && s.colorSource == ColorSource.CUSTOM
+                Box(
+                    Modifier.size(34.dp).clip(CircleShape).background(Color(c))
+                        .border(if (selected) 2.dp else 0.dp, if (selected) cs.onSurface else Color.Transparent, CircleShape)
+                        .clickable { switch { vm.updateSettings { it.copy(seedColor = c, colorSource = ColorSource.CUSTOM) } } },
+                )
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FilterChip(
+                selected = s.themedIcons,
+                onClick = { vm.updateSettings { it.copy(themedIcons = !s.themedIcons) } },
+                label = { Text(stringResource(R.string.menu_theme_icons), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                modifier = Modifier.weight(1f),
+            )
+            FilterChip(
+                selected = s.showSearchPill,
+                onClick = { vm.updateSettings { it.copy(showSearchPill = !s.showSearchPill) } },
+                label = { Text(stringResource(R.string.menu_search_bar), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+/** Третья вкладка: системные и лаунчерные действия без перехода в настройки. */
+@Composable
+private fun MenuActionsTab(
+    actions: HomeActions,
+    onWidgets: () -> Unit,
+    onWallpaper: () -> Unit,
+    onThemes: () -> Unit,
+    onSettings: () -> Unit,
+) {
+    val items = listOf(
+        Triple(Icons.Rounded.Lock, R.string.menu_action_lock, { actions.lockScreen() }),
+        Triple(Icons.Rounded.Notifications, R.string.menu_action_notifications, { actions.expandNotifications() }),
+        Triple(Icons.Rounded.Widgets, R.string.home_widgets, onWidgets),
+        Triple(Icons.Rounded.Wallpaper, R.string.home_wallpaper, onWallpaper),
+        Triple(Icons.Rounded.Palette, R.string.home_themes, onThemes),
+        Triple(Icons.Rounded.Settings, R.string.home_settings, onSettings),
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (row in items.chunked(2)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                for ((icon, label, click) in row) {
+                    MenuActionButton(icon, stringResource(label), click, Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MenuActionButton(icon: ImageVector, text: String, onClick: () -> Unit, modifier: Modifier) {
+    val cs = MaterialTheme.colorScheme
+    val haptics = LocalHaptics.current
+    Surface(
+        onClick = { haptics.play(HapticKind.CLICK, HapticGroup.TOUCH); onClick() },
+        shape = RoundedCornerShape(18.dp),
+        color = cs.secondaryContainer,
+        contentColor = cs.onSecondaryContainer,
+        modifier = modifier.height(48.dp),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(icon, null, Modifier.size(20.dp))
+            Text(text, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

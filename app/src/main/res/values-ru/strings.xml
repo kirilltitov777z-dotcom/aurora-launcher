@@ -10,6 +10,15 @@
     <string name="home_wallpaper">Обои</string>
     <string name="home_settings">Настройки</string>
     <string name="home_themes">Темы</string>
+    <string name="home_menu_title">Быстрое меню</string>
+    <string name="menu_tab_main">Главное</string>
+    <string name="menu_tab_style">Оформление</string>
+    <string name="menu_tab_actions">Действия</string>
+    <string name="menu_quick_accent">Акцент</string>
+    <string name="menu_theme_icons">Иконки в цвете темы</string>
+    <string name="menu_search_bar">Строка поиска</string>
+    <string name="menu_action_lock">Блокировка</string>
+    <string name="menu_action_notifications">Шторка</string>
     <plurals name="widgets_count">
         <item quantity="one">%d виджет</item>
         <item quantity="few">%d виджета</item>

@@ -904,6 +904,8 @@ fun HomeScreen(vm: LauncherViewModel, actions: HomeActions) {
                 exit = fadeOut(MaterialTheme.motionScheme.fastEffectsSpec()),
             ) {
                 HomeMenu(
+                    vm = vm,
+                    actions = actions,
                     onDismiss = { showHomeMenu = null },
                     onWidgets = { showHomeMenu = null; showWidgets = true },
                     onWallpaper = { showHomeMenu = null; showWallpaperSheet = true },

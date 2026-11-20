@@ -122,7 +122,7 @@ data class Settings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val colorSource: ColorSource = ColorSource.WALLPAPER,
     val contrast: Float = 0f,
-    val seedColor: Int = 0xFF6750A4.toInt(),
+    val seedColor: Int = 0xFF00A2C7.toInt(),
     val amoled: Boolean = false,
     val paletteStyle: Int = 0, // индекс в списке стилей палитры
     val cornerScale: Float = 1f,
@@ -148,7 +148,8 @@ data class Settings(
     // Иконки
     val iconShape: IconShape = IconShape.COOKIE_9,
     val iconScale: Float = 1f,
-    val themedIcons: Boolean = false,
+    // Форк: значки сразу носят цвета темы. Раньше по умолчанию было false, из-за чего перекраска не включалась.
+    val themedIcons: Boolean = true,
     val duotoneIcons: Boolean = false, // устарело: объединено с themedIcons, читается только при переносе настроек
     /** Фон тематических значков: 0 — тона палитры, 1 — как док, 2 — как строка поиска, 3 — второстепенный (тема Expressive). */
     val themedIconColors: Int = 0,

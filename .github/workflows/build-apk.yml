@@ -48,21 +48,22 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AuroraLauncher-2.0-apk
+          name: AuroraLauncher-2.1-apk
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.0
-          name: Aurora Launcher v2.0
+          tag_name: v2.1
+          name: Aurora Launcher v2.1 — full redesign
           body: |
-            Fork of Expressive Launcher v1.3.
+            Full redesign of the Expressive Launcher v1.3 fork.
 
-            - 5 themes: Liquid Glass, Material 3 Expressive, Lite, Aurora, Neon
-            - Aurora is the default theme; Neon adds a sharp, glowing look
-            - Home menu has a quick "Themes" button
+            - 3-tab home menu: Home / Style / Actions (quick theme, accent, tint toggles)
+            - Icons are tinted with the palette by default
+            - Brand-new app icon: geometric "A" with an aurora star
+            - 5 themes, 28 accent colors, own icon masks per theme
             - Bug fixes: wallpaper picker, grid placement, settings import
           files: app/build/outputs/apk/release/app-release.apk
         env:
