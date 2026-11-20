@@ -24,7 +24,7 @@
 
 APK **не прикладывается**: сборка Android-приложения требует JDK и Android SDK, а в окружении, где правился проект, Java не запускается. Соберите локально:
 
-1. Установите Android Studio (или JDK 21 + Android SDK 36).
+1. Установите Android Studio (или JDK 21 + Android SDK 37; платформа 37 доступна в canary-канале SDK).
 2. Откройте папку проекта.
 3. Выполните `./gradlew assembleRelease` (или `./gradlew assembleDebug`).
 4. Готовый APK: `app/build/outputs/apk/release/app-release.apk`.

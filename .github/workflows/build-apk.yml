@@ -23,7 +23,7 @@ jobs:
 
       # На ubuntu-latest Android SDK уже предустановлен. Экшен setup-android здесь только мешает:
       # он пытается поставить удалённый пакет `tools` и падает до сборки.
-      - name: Install Android 36 platform
+      - name: Install Android 37 platform
         run: |
           SDK=/usr/local/lib/android/sdk
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
@@ -31,7 +31,13 @@ jobs:
           SDKMANAGER=$(find "$SDK/cmdline-tools" -type f -name sdkmanager | head -1)
           echo "sdkmanager: $SDKMANAGER"
           yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
-          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+          # Пакет compileSdk 37 публикуется только в canary-репозитории как android-37.0
+          "$SDKMANAGER" --channel=3 "platforms;android-37.0" "build-tools;37.0.0"
+          # AGP ищет каталог строго platforms/android-37
+          if [ ! -d "$SDK/platforms/android-37" ]; then
+            cp -a "$SDK/platforms/android-37.0" "$SDK/platforms/android-37"
+          fi
+          ls "$SDK/platforms"
 
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
