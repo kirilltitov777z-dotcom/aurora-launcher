@@ -4,17 +4,18 @@ plugins {
 }
 
 android {
-    namespace = "com.example.expressivelauncher"
+    namespace = "com.aurora.launcher"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.example.expressivelauncher"
+        applicationId = "com.aurora.launcher"
         minSdk = 27
         targetSdk = 36
         // versionCode обязательно расти: иначе часть установщиков не ставит APK поверх уже
         // установленной версии и пишет «Приложение не установлено»
-        versionCode = 3
-        versionName = "1.2"
+        // Новая ветка форка: версия 2.0, код больше, чем у исходной 1.3 (код 3).
+        versionCode = 4
+        versionName = "2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

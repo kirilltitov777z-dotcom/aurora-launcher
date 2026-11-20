@@ -1,78 +1,46 @@
-# Expressive Launcher
+# Aurora Launcher
 
-An Android home screen with three looks — Liquid Glass, Material 3 Expressive and Material You Lite —
-built with Kotlin and Jetpack Compose. Every panel, icon and animation follows the theme you pick.
+Форк [Expressive Launcher](https://github.com/kotlalipopus/expressive-launcher) v1.3 — домашний экран на Kotlin + Jetpack Compose. Переименован, переработан визуал, добавлены новые темы и исправлен ряд багов.
 
-<!-- Add 2–3 screenshots here, for example:
-<p>
-  <img src="screenshots/liquid-glass.png" width="250">
-  <img src="screenshots/expressive.png" width="250">
-  <img src="screenshots/lite.png" width="250">
-</p>
--->
+## Что изменилось в этой ветке
 
-## Download
+- **Название и идентичность:** Aurora Launcher, пакет `com.aurora.launcher`, версия 2.0 (код 4). Ставится отдельным приложением рядом с оригиналом.
+- **Пять тем вместо трёх:**
+  - Liquid Glass — стекло с преломлением;
+  - Material 3 Expressive — крупные формы и пружины;
+  - Material You Lite — просто и быстро;
+  - **Aurora** (новая, по умолчанию) — светящееся стекло, яркий акцент, мягкие пружины, цветные обои;
+  - **Neon** (новая) — контраст, острые скругления, усиленная подсветка и анимации.
+- **Больше визуального выбора:** 28 акцентных цветов вместо 18, у Aurora и Neon свои маски значков (выбираются на странице «Темы»), новые цвета иконки приложения.
+- **Меню стола:** четвёртая кнопка «Темы» — долгое нажатие на пустом месте открывает настройки сразу на странице тем.
+- **Исправления:**
+  - выбор обоев больше не падает, если системный 파일 исчез между выбором и сохранением;
+  - `findFree` учитывает запрошенную страницу, если она дальше всех существующих;
+  - импорт настроек больше не сообщает об успехе при ошибке записи в SharedPreferences;
+  - убран небезопасный `!!` при отрисовке тематических значков.
+- Обновлены обе локали (RU/EN), строка поиска в настройках знает новые темы, обновлён онбординг.
 
-Get the latest APK from [Releases](https://github.com/kotlalipopus/expressive-launcher/releases/latest).
+## Сборка APK
 
-Requires Android 8.1 or newer. Liquid Glass refraction needs Android 13+.
+APK **не прикладывается**: сборка Android-приложения требует JDK и Android SDK, а в окружении, где правился проект, Java не запускается. Соберите локально:
 
-## Features
+1. Установите Android Studio (или JDK 17 + Android SDK 37).
+2. Откройте папку проекта.
+3. Выполните `./gradlew assembleRelease` (или `./gradlew assembleDebug`).
+4. Готовый APK: `app/build/outputs/apk/release/app-release.apk`.
 
-- **Themes:** Liquid Glass (iOS 26–style liquid glass), Material 3 Expressive, Material You Lite — one tap, with a cross-fade
-- **Liquid Glass:** real lens refraction of what is under the glass, rainbow edges, corner glints on icons, widgets and panels,
-  buttons that stretch like liquid when you drag them (powered by [liquid](https://github.com/FletchMcKee/liquid))
-- **Wallpaper:** your own launcher wallpaper with dim, blur and parallax, or set it as the system wallpaper too
-- **Icons:** themed icons in Material You colors, icon packs, 13 icon shapes, glass icon styles (normal, clear, tinted)
-- **Per-app customization:** picture, shape, size, custom name and label visibility for every app
-- **Home screen:** grid size, dock, folders, widgets with resizing, page transitions, multi-select
-- **App launch:** the app window grows out of its icon and shrinks back into it, interruptible at any moment
-- **Search bar:** Google, DuckDuckGo, Bing, Yandex, Brave or Perplexity, custom buttons (voice, Lens, AI mode, any app)
-- **App drawer:** alphabet scroller, search, hidden apps, recently installed
-- **Gestures:** swipe up, swipe down, double tap — each with its own action
-- **Look:** Material You or a custom accent color, palettes, contrast, AMOLED black, custom fonts
-- **Onboarding:** first-run setup with theme, layout, gestures and permissions
-- **App language:** Russian or English
+На компьютере с SDK можно запустить `./build-apk.sh` — скрипт сам соберёт release и скопирует APK в корень проекта.
 
-## Installation
+## Установка
 
-1. Download and install the APK from [Releases](https://github.com/kotlalipopus/expressive-launcher/releases/latest).
-2. Open the app and follow the first-run setup.
-3. Choose Expressive Launcher as your default home app when asked (or in **Settings → Apps → Default apps → Home app**).
+- Требуется Android 8.1+. Преломление стекла — Android 13+.
+- Пакет отличается от оригинального, поэтому приложения ставятся рядом. Если ставите поверх другой сборки с тем же пакетом и другим ключом — сначала удалите старую.
+- После установки сделайте Aurora Launcher лаунчером по умолчанию (главная кнопка → «Всегда»), либо в **Настройки → Приложения → Лаунчер по умолчанию**.
 
-If Android says "App not installed" when updating, uninstall the old copy first: a build signed with a different
-key (for example, an old test build from another computer) cannot be installed as an update, and `versionCode`
-must be newer than the installed one.
+## Разрешения
 
-## Permissions
+Оригинальный набор без изменений: запрос всех пакетов (список приложений), доступ к файлам (размытие обоев), установка обоев, будильник (часы), уведомления (бейджи), доступность (жесты), вибрация. Интернета у лаунчера нет.
 
-| Permission | Why |
-|---|---|
-| Query all packages | Show every installed app in the drawer and on the home screen |
-| All files access | Read the system wallpaper image so the glass can show it (optional) |
-| Set wallpaper | "Also set as system wallpaper" button in the wallpaper menu |
-| Set alarm | Tapping the clock opens the alarm list; required by some firmware (HyperOS) |
-| Notification access | Unread badges on icons (optional, granted in system settings) |
-| Accessibility service | Gestures that lock the screen or open notifications (optional, granted in system settings) |
-| Expand status bar | Swipe-down gesture opens notifications |
-| Request delete packages | "Uninstall" in the icon menu |
-| Vibration | Haptic feedback |
+## Источник
 
-The launcher has no internet permission: nothing you do on the home screen leaves your phone.
-
-## Building from source
-
-You need Android Studio (or JDK 17 and Android SDK 37).
-
-```bash
-git clone https://github.com/kotlalipopus/expressive-launcher.git
-cd expressive-launcher
-./gradlew assembleRelease
-```
-
-The APK will be in `app/build/outputs/apk/release/`. A debug build (`./gradlew assembleDebug`)
-installs next to it as a separate app, `com.example.expressivelauncher.debug`.
-
-## License
-
-[MIT](LICENSE)
+Основа: [Expressive Launcher](https://github.com/kotlalipopus/expressive-launcher) v1.3, лицензия MIT.

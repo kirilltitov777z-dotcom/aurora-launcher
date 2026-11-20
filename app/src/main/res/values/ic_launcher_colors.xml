@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#4F378B</color>
-    <color name="ic_launcher_face">#D0BCFF</color>
-    <color name="ic_launcher_ink">#21005D</color>
+    <!-- Новая палитра иконки форка: глубокий синий и мятный «северное сияние». -->
+    <color name="ic_launcher_background">#123C69</color>
+    <color name="ic_launcher_face">#8BE9D7</color>
+    <color name="ic_launcher_ink">#07223E</color>
 </resources>

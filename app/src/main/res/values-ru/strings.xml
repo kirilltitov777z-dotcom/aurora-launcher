@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Expressive Launcher</string>
+    <string name="app_name">Aurora Launcher</string>
 
     <!-- Home -->
     <string name="search_hint">Поиск приложений и в интернете</string>
@@ -9,6 +9,7 @@
     <string name="home_widgets">Виджеты</string>
     <string name="home_wallpaper">Обои</string>
     <string name="home_settings">Настройки</string>
+    <string name="home_themes">Темы</string>
     <plurals name="widgets_count">
         <item quantity="one">%d виджет</item>
         <item quantity="few">%d виджета</item>
@@ -60,7 +61,7 @@
     <string name="set_backup">Резервная копия и о программе</string>
     <string name="set_backup_hint">Экспорт и импорт настроек и раскладки</string>
     <string name="make_default">Сделать основным лаунчером</string>
-    <string name="make_default_hint">Использовать Expressive Launcher как рабочий стол</string>
+    <string name="make_default_hint">Использовать Aurora Launcher как рабочий стол</string>
 
     <!-- Settings: appearance -->
     <string name="theme_mode">Тема</string>
@@ -155,8 +156,8 @@
     <string name="gesture_settings">Настройки лаунчера</string>
     <string name="a11y">Служба специальных возможностей</string>
     <string name="a11y_hint">Нужна для блокировки экрана жестом на некоторых устройствах</string>
-    <string name="a11y_service_label">Жесты Expressive Launcher</string>
-    <string name="a11y_description">Позволяет Expressive Launcher блокировать экран и открывать шторку уведомлений по жесту. Содержимое экрана не читается.</string>
+    <string name="a11y_service_label">Жесты Aurora Launcher</string>
+    <string name="a11y_description">Позволяет Aurora Launcher блокировать экран и открывать шторку уведомлений по жесту. Содержимое экрана не читается.</string>
     <string name="need_a11y">Включите службу специальных возможностей в настройках</string>
 
     <!-- Settings: backup -->
@@ -171,7 +172,7 @@
     <string name="version">Версия %s</string>
     <string name="no_browser">Браузер не найден</string>
     <string name="hero_ready">Всё готово</string>
-    <string name="hero_ready_sub">Expressive Launcher — ваш рабочий стол</string>
+    <string name="hero_ready_sub">Aurora Launcher — ваш рабочий стол</string>
     <string name="hero_almost">Почти готово</string>
     <string name="hero_almost_sub">Сделайте его основным лаунчером</string>
     <string name="hero_action">Сделать основным</string>
@@ -202,7 +203,7 @@
     <string name="dock_radius">Скругление дока</string>
     <string name="label_size">Размер подписей</string>
     <string name="about_hint">Версия, разрешения, устройство</string>
-    <string name="about_desc">Рабочий стол в стиле Material 3 Expressive: свои формы иконок, цвета, жесты и быстрое меню приложений.</string>
+    <string name="about_desc">Aurora Launcher — домашний экран с пятью визуальными темами, своими формами иконок, цветами, жестами и быстрым списком приложений. Форк Expressive Launcher v1.3.</string>
     <plurals name="hidden_count">
         <item quantity="one">Скрыто: %d</item>
         <item quantity="few">Скрыто: %d</item>
@@ -362,7 +363,7 @@
     <string name="sb_gemini">Gemini</string>
     <!-- Темы -->
     <string name="set_themes">Темы</string>
-    <string name="set_themes_hint">Liquid Glass, Material 3 Expressive, Material You Lite</string>
+    <string name="set_themes_hint">Liquid Glass, Material 3 Expressive, Lite, Aurora, Neon</string>
     <string name="themes_choose">Тема</string>
     <string name="theme_glass">Liquid Glass</string>
     <string name="theme_glass_tagline">Стекло и размытие</string>
@@ -370,6 +371,10 @@
     <string name="theme_expressive_tagline">Яркие формы и анимации</string>
     <string name="theme_lite">Material You Lite</string>
     <string name="theme_lite_tagline">Просто и быстро</string>
+    <string name="theme_aurora">Аврора</string>
+    <string name="theme_aurora_tagline">Светящееся стекло и цветные обои</string>
+    <string name="theme_neon">Неон</string>
+    <string name="theme_neon_tagline">Острые формы и яркая подсветка</string>
     <string name="theme_settings_of">Настройки темы %1$s</string>
     <string name="dynamic_colors">Динамические цвета из обоев</string>
     <string name="dynamic_colors_hint">Цвета подстраиваются под обои (Android 12+)</string>
@@ -429,7 +434,7 @@
     <string name="onb_allow">Разрешить</string>
     <string name="onb_default_title">Лаунчер по умолчанию</string>
     <string name="onb_default_sub">Чтобы кнопка «Домой» и жесты вели сюда</string>
-    <string name="onb_default_done">Expressive Launcher — лаунчер по умолчанию</string>
+    <string name="onb_default_done">Aurora Launcher — лаунчер по умолчанию</string>
     <string name="onb_make_default">Сделать по умолчанию</string>
     <string name="onb_done_title">Всё готово</string>
     <string name="onb_done_sub">Рабочий стол настроен. Всё, что вы выбрали, есть в настройках.</string>

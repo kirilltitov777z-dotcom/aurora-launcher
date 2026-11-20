@@ -5,7 +5,7 @@
         Обои рисует система. Окно не помечаем как translucent: прозрачность даёт windowShowWallpaper,
         а флаг translucent только ломает системные переходы при запуске приложений и добавляет работы композитору.
     -->
-    <style name="Theme.ExpressiveLauncher" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.AuroraLauncher" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:colorBackgroundCacheHint">@null</item>
         <item name="android:windowShowWallpaper">true</item>

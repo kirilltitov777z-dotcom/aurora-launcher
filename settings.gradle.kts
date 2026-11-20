@@ -22,6 +22,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Expressive Launcher"
+rootProject.name = "Aurora Launcher"
 include(":app")
  
