@@ -24,12 +24,14 @@
 
 APK **не прикладывается**: сборка Android-приложения требует JDK и Android SDK, а в окружении, где правился проект, Java не запускается. Соберите локально:
 
-1. Установите Android Studio (или JDK 17 + Android SDK 37).
+1. Установите Android Studio (или JDK 21 + Android SDK 36).
 2. Откройте папку проекта.
 3. Выполните `./gradlew assembleRelease` (или `./gradlew assembleDebug`).
 4. Готовый APK: `app/build/outputs/apk/release/app-release.apk`.
 
 На компьютере с SDK можно запустить `./build-apk.sh` — скрипт сам соберёт release и скопирует APK в корень проекта.
+
+Готовая сборка также делается через GitHub Actions: `.github/workflows/build-apk.yml` собирает APK и публикует его в Release `v2.0` репозитория `https://github.com/kirilltitov777z-dotcom/aurora-launcher`.
 
 ## Установка
 

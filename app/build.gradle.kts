@@ -5,7 +5,9 @@ plugins {
 
 android {
     namespace = "com.aurora.launcher"
-    compileSdk = 37
+    // API 37 есть только в canary-канале SDK; код использует не выше API 34,
+    // поэтому стабильная платформа 36 собирает тот же результат без экспериментального SDK.
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.aurora.launcher"
