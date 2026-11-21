@@ -70,6 +70,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Email
 import androidx.compose.material.icons.rounded.FormatSize
+import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Gesture
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Home
@@ -290,7 +291,10 @@ private class SearchEntry(val title: Int, val page: SettingsPage)
 
 private val searchIndex = listOf(
     R.string.set_themes to SettingsPage.THEMES, R.string.theme_glass to SettingsPage.THEMES, R.string.theme_expressive to SettingsPage.THEMES,
-    R.string.theme_lite to SettingsPage.THEMES, R.string.theme_aurora to SettingsPage.THEMES, R.string.theme_neon to SettingsPage.THEMES,
+    R.string.theme_lite to SettingsPage.THEMES, R.string.theme_ios to SettingsPage.THEMES,
+    R.string.theme_nothing to SettingsPage.THEMES, R.string.theme_custom to SettingsPage.THEMES,
+    R.string.fingerprint_title to SettingsPage.GESTURES, R.string.fingerprint_open to SettingsPage.GESTURES,
+    R.string.ready_widget_hyper to SettingsPage.THEMES,
     R.string.dynamic_colors to SettingsPage.THEMES, R.string.glass_icons to SettingsPage.THEMES,
     R.string.onboarding_redo to SettingsPage.HOME,
     R.string.theme_mode to SettingsPage.COLORS, R.string.color_source to SettingsPage.COLORS, R.string.accent_color to SettingsPage.COLORS,
@@ -848,6 +852,7 @@ private fun HomeScreenPage(vm: LauncherViewModel, onSearchBar: () -> Unit) {
             listOf(
                 ClockStyle.BIG to stringResource(R.string.clock_big),
                 ClockStyle.COMPACT to stringResource(R.string.clock_compact),
+                ClockStyle.HYPER to stringResource(R.string.clock_hyper),
                 ClockStyle.OFF to stringResource(R.string.clock_off),
             ),
             s.clockStyle,
@@ -936,6 +941,16 @@ private fun GesturesPage(vm: LauncherViewModel, actions: HomeActions) {
         ChoiceItem(Icons.Rounded.Swipe, stringResource(R.string.swipe_up), null, options, s.swipeUp) { v -> upd { it.copy(swipeUp = v) } }
         ChoiceItem(Icons.Rounded.Swipe, stringResource(R.string.swipe_down), null, options, s.swipeDown) { v -> upd { it.copy(swipeDown = v) } }
         ChoiceItem(Icons.Rounded.TouchApp, stringResource(R.string.double_tap), null, options, s.doubleTap) { v -> upd { it.copy(doubleTap = v) } }
+    }
+    SettingsSection(stringResource(R.string.fingerprint_title)) {
+        ToggleItem(
+            Icons.Rounded.Fingerprint, stringResource(R.string.fingerprint_on_home),
+            stringResource(R.string.fingerprint_hint), s.fingerprintOnHome,
+        ) { v -> upd { it.copy(fingerprintOnHome = v) } }
+        ToggleItem(
+            Icons.Rounded.Vibration, stringResource(R.string.fingerprint_vibration), null, s.fingerprintSound,
+        ) { v -> upd { it.copy(fingerprintSound = v) } }
+        ActionItem(Icons.Rounded.Fingerprint, stringResource(R.string.fingerprint_open), null) { actions.showFingerprint() }
     }
     PermissionsSection(actions, onlyGestures = true)
 }

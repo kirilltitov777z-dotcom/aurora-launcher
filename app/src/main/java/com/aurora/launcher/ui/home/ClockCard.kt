@@ -24,11 +24,14 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.BatteryFull
@@ -48,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -165,7 +169,9 @@ fun ClockCard(style: ClockStyle, refreshKey: Int) {
                 }
             }
         }
-        if (style == ClockStyle.BIG) {
+        when (style) {
+            ClockStyle.HYPER -> HyperClock(time, date, percent, charging, s, horizontal, ink)
+            ClockStyle.BIG -> {
             val infoHeight = if (s.showDate || showBattery) 28.dp else 0.dp
             val size = with(LocalDensity.current) {
                 min(min(maxHeight - infoHeight, maxWidth * 0.5f) * 0.9f, 112.dp).toSp()
@@ -178,8 +184,9 @@ fun ClockCard(style: ClockStyle, refreshKey: Int) {
                 )
                 info()
             }
-        } else {
-            val size = 40.sp * s.clockScale
+        }
+            ClockStyle.COMPACT -> {
+                val size = 40.sp * s.clockScale
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp, horizontal.let { if (it == Alignment.Start) Alignment.Start else if (it == Alignment.End) Alignment.End else Alignment.CenterHorizontally }),
@@ -193,6 +200,8 @@ fun ClockCard(style: ClockStyle, refreshKey: Int) {
                 info()
             }
         }
+        ClockStyle.OFF -> Unit
+    }
     }
 }
 
@@ -206,4 +215,62 @@ private fun RollingText(text: String, style: TextStyle, color: Color) {
         transitionSpec = { (slideInVertically(spec) { it } + fadeIn(fade)) togetherWith (slideOutVertically(spec) { -it } + fadeOut(fade)) },
         label = "clockDigits",
     ) { Text(it, style = style, color = color, maxLines = 1) }
+}
+
+/**
+ * Часы в духе HyperOS: очень крупное время с плавным градиентом и «стеклянные» пилюли даты и заряда.
+ * Никаких подложек под всем блоком — текст ложится прямо на обои, как и обычные часы стола.
+ */
+@Composable
+private fun HyperClock(
+    time: String,
+    date: String,
+    percent: Int,
+    charging: Boolean,
+    s: com.aurora.launcher.data.Settings,
+    horizontal: Alignment.Horizontal,
+    ink: Color,
+) {
+    val cs = MaterialTheme.colorScheme
+    val light = com.aurora.launcher.ui.LocalWallpaperLight.current
+    val gradient = if (light) {
+        listOf(Color(0xFF111114), Color(0xFF45454F))
+    } else {
+        listOf(Color.White, cs.primary, cs.tertiary)
+    }
+    val size = 68.sp * s.clockScale
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = horizontal, verticalArrangement = Arrangement.Center) {
+        RollingText(
+            time,
+            LocalClockStyle.current.copy(
+                fontSize = size,
+                lineHeight = size * 1.02f,
+                fontWeight = FontWeight.Black,
+                letterSpacing = (-size.value * 0.055f).sp,
+                brush = Brush.linearGradient(gradient),
+            ),
+            ink,
+        )
+        if (s.showDate || (s.showBattery && percent > 0)) {
+            Spacer(Modifier.height(2.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (s.showDate) {
+                    Box(Modifier.clip(RoundedCornerShape(50)).background(ink.copy(alpha = 0.16f)).padding(horizontal = 12.dp, vertical = 5.dp)) {
+                        Text(date, style = MaterialTheme.typography.labelLarge.copy(color = ink), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                if (s.showBattery && percent > 0) {
+                    Box(Modifier.clip(RoundedCornerShape(50)).background(ink.copy(alpha = 0.16f)).padding(horizontal = 10.dp, vertical = 5.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(
+                                if (charging) Icons.Rounded.BatteryChargingFull else Icons.Rounded.BatteryFull,
+                                null, tint = ink, modifier = Modifier.size(16.dp),
+                            )
+                            Text("$percent%", style = MaterialTheme.typography.labelLarge.copy(color = ink), maxLines = 1)
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

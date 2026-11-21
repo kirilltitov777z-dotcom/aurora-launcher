@@ -11,7 +11,7 @@ class SettingsStore(context: Context) {
     /** На слабых устройствах по умолчанию облегчённая тема: без размытия и пружин. */
     private val defaultStyle = if (
         (context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager)?.isLowRamDevice == true
-    ) LauncherStyle.LITE else LauncherStyle.AURORA
+    ) LauncherStyle.LITE else LauncherStyle.IOS
     private val _state = MutableStateFlow(load())
     val state: StateFlow<Settings> = _state.asStateFlow()
 
@@ -69,8 +69,11 @@ class SettingsStore(context: Context) {
         // Семантика themedIconFgColors изменилась: раньше это был тон рисунка, теперь — цвет фона.
         // Сохранённый старый выбор один раз сбрасываем на «Авто», чтобы значки не стали невидимыми.
         val fgMigrated = prefs.getBoolean("themedIconFgMigrated", false)
+        // Удалённые темы Avrora/Neon из старых сборок переводим на новую основную тему iOS
+        val storedStyle = prefs.getString("style", null)
+        val migratedStyle = if (storedStyle == "AURORA" || storedStyle == "NEON") LauncherStyle.IOS else enumOf("style", defaultStyle)
         return Settings(
-            style = enumOf("style", defaultStyle),
+            style = migratedStyle,
             glassOpacity = prefs.getFloat("glassOpacity", d.glassOpacity),
             // Раньше был переключатель «стеклянные значки»: включённый становится прозрачным стилем
             glassIconStyle = enumOf("glassIconStyle", if (prefs.getBoolean("glassIcons", false)) GlassIconStyle.CLEAR else d.glassIconStyle),
@@ -78,8 +81,15 @@ class SettingsStore(context: Context) {
             glassHighlightStrength = prefs.getFloat("glassHighlightStrength", d.glassHighlightStrength),
             glassIconShape = enumOf("glassIconShape", d.glassIconShape),
             liteIconShape = enumOf("liteIconShape", d.liteIconShape),
-            auroraIconShape = enumOf("auroraIconShape", d.auroraIconShape),
-            neonIconShape = enumOf("neonIconShape", d.neonIconShape),
+            iosIconShape = enumOf("iosIconShape", d.iosIconShape),
+            nothingIconShape = enumOf("nothingIconShape", d.nothingIconShape),
+            customThemeName = prefs.getString("customThemeName", d.customThemeName) ?: d.customThemeName,
+            customIconShape = enumOf("customIconShape", d.customIconShape),
+            customCorner = prefs.getFloat("customCorner", d.customCorner),
+            customGlass = prefs.getBoolean("customGlass", d.customGlass),
+            customDock = prefs.getBoolean("customDock", d.customDock),
+            customGlow = prefs.getFloat("customGlow", d.customGlow),
+            customExpressive = prefs.getBoolean("customExpressive", d.customExpressive),
             customWallpaper = prefs.getBoolean("customWallpaper", d.customWallpaper),
             wallpaperBlur = prefs.getFloat("wallpaperBlur", d.wallpaperBlur),
             wallpaperParallax = prefs.getBoolean("wallpaperParallax", d.wallpaperParallax),
@@ -165,6 +175,8 @@ class SettingsStore(context: Context) {
             closeAnimScale = prefs.getFloat("closeAnimScale", d.closeAnimScale),
             debugSlowLaunch = prefs.getBoolean("debugSlowLaunch", d.debugSlowLaunch),
             searchEngine = prefs.getInt("searchEngine", d.searchEngine),
+            fingerprintOnHome = prefs.getBoolean("fingerprintOnHome", d.fingerprintOnHome),
+            fingerprintSound = prefs.getBoolean("fingerprintSound", d.fingerprintSound),
         )
     }
 
@@ -177,8 +189,15 @@ class SettingsStore(context: Context) {
             .putFloat("glassHighlightStrength", s.glassHighlightStrength)
             .putString("glassIconShape", s.glassIconShape.name)
             .putString("liteIconShape", s.liteIconShape.name)
-            .putString("auroraIconShape", s.auroraIconShape.name)
-            .putString("neonIconShape", s.neonIconShape.name)
+            .putString("iosIconShape", s.iosIconShape.name)
+            .putString("nothingIconShape", s.nothingIconShape.name)
+            .putString("customThemeName", s.customThemeName)
+            .putString("customIconShape", s.customIconShape.name)
+            .putFloat("customCorner", s.customCorner)
+            .putBoolean("customGlass", s.customGlass)
+            .putBoolean("customDock", s.customDock)
+            .putFloat("customGlow", s.customGlow)
+            .putBoolean("customExpressive", s.customExpressive)
             .putBoolean("customWallpaper", s.customWallpaper)
             .putFloat("wallpaperBlur", s.wallpaperBlur)
             .putBoolean("wallpaperParallax", s.wallpaperParallax)
@@ -266,6 +285,8 @@ class SettingsStore(context: Context) {
             .putFloat("closeAnimScale", s.closeAnimScale)
             .putBoolean("debugSlowLaunch", s.debugSlowLaunch)
             .putInt("searchEngine", s.searchEngine)
+            .putBoolean("fingerprintOnHome", s.fingerprintOnHome)
+            .putBoolean("fingerprintSound", s.fingerprintSound)
             .apply()
     }
 }

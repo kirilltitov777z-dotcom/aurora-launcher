@@ -365,7 +365,8 @@ private fun ColumnScope.ThemeStep(vm: LauncherViewModel) {
     ThemeCards(s.style, s, previewHeight = 156.dp) { spec -> switch { vm.updateSettings { it.copy(style = spec.style) } } }
     // Liquid Glass лучше всего выглядит со значками в стиле iOS 26: подсказка и выбор установленного набора
     if (s.style == com.aurora.launcher.data.LauncherStyle.LIQUID_GLASS ||
-        s.style == com.aurora.launcher.data.LauncherStyle.AURORA
+        s.style == com.aurora.launcher.data.LauncherStyle.IOS ||
+        s.style == com.aurora.launcher.data.LauncherStyle.CUSTOM
     ) {
         SettingsSection(stringResource(R.string.onb_icon_pack_title)) {
             GroupItem {
@@ -395,7 +396,7 @@ private fun ColumnScope.HomeStep(vm: LauncherViewModel) {
     fun upd(f: (com.aurora.launcher.data.Settings) -> com.aurora.launcher.data.Settings) = vm.updateSettings(f)
     StepHeader(R.string.onb_home_title, R.string.onb_home_sub)
     // Живое превью: сетка, подписи и док меняются вместе с ползунками
-    MiniDesktop(LauncherThemes.of(s.style), s, Modifier.fillMaxWidth().height(150.dp))
+    MiniDesktop(LauncherThemes.resolve(s), s, Modifier.fillMaxWidth().height(150.dp))
     SettingsSection(null) {
         SliderItem(Icons.Rounded.ViewColumn, stringResource(R.string.columns), s.columns.toFloat(), 3f..7f, { it.roundToInt().toString() }, steps = 3) { v ->
             upd { it.copy(columns = v.roundToInt()) }

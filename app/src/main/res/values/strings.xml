@@ -210,7 +210,7 @@
     <string name="dock_radius">Dock corner radius</string>
     <string name="label_size">Label size</string>
     <string name="about_hint">Version, permissions, device</string>
-    <string name="about_desc">Aurora Launcher — a home screen with five looks, live colors, gestures and a fast app drawer. Your home, your rules.</string>
+    <string name="about_desc">Aurora Launcher — a home screen with six looks, live colors, gestures, ready widgets, a fingerprint scanner and a fast app drawer. Your home, your rules.</string>
     <plurals name="hidden_count">
         <item quantity="one">%d hidden</item>
         <item quantity="other">%d hidden</item>
@@ -367,7 +367,7 @@
     <string name="sb_gemini">Gemini</string>
     <!-- Темы -->
     <string name="set_themes">Themes</string>
-    <string name="set_themes_hint">Glass, Pulse, Lite, Aurora, Neon</string>
+    <string name="set_themes_hint">Glass, Pulse, Lite, iOS, Nothing, Custom</string>
     <string name="themes_choose">Theme</string>
     <string name="theme_glass">Glass</string>
     <string name="theme_glass_tagline">Glass and blur</string>
@@ -375,10 +375,12 @@
     <string name="theme_expressive_tagline">Bold shapes and motion</string>
     <string name="theme_lite">Lite</string>
     <string name="theme_lite_tagline">Simple and fast</string>
-    <string name="theme_aurora">Aurora</string>
-    <string name="theme_aurora_tagline">Glowing glass and colorful walls</string>
-    <string name="theme_neon">Neon</string>
-    <string name="theme_neon_tagline">Sharp shapes and bright glow</string>
+    <string name="theme_ios">iOS</string>
+    <string name="theme_ios_tagline">Smooth glass and familiar gestures</string>
+    <string name="theme_nothing">Nothing</string>
+    <string name="theme_nothing_tagline">Monochrome, sharp and calm</string>
+    <string name="theme_custom">Custom</string>
+    <string name="theme_custom_tagline">Built by you</string>
     <string name="theme_settings_of">%1$s settings</string>
     <string name="dynamic_colors">Dynamic colors from wallpaper</string>
     <string name="dynamic_colors_hint">Colors follow your wallpaper (Android 12+)</string>
@@ -484,4 +486,32 @@
     <string name="ready_widget_compact_hint">A small clock without the battery row</string>
     <string name="ready_widget_clean">Clean home</string>
     <string name="ready_widget_clean_hint">Only the search bar, no clock</string>
+    <string name="ready_widget_hyper">HyperOS clock</string>
+    <string name="ready_widget_hyper_hint">Oversized gradient time with date and battery</string>
+    <string name="ready_widget_nothing">Nothing clock</string>
+    <string name="ready_widget_nothing_hint">Precise minimal time without extra details</string>
+
+    <!-- Custom theme builder -->
+    <string name="custom_theme_title">Your theme</string>
+    <string name="custom_theme_name">Theme name</string>
+    <string name="custom_theme_shape">Icon shape</string>
+    <string name="custom_theme_corner">Corner roundness</string>
+    <string name="custom_theme_glass">Glass panels</string>
+    <string name="custom_theme_dock">Dock background</string>
+    <string name="custom_theme_glow">Soft glow</string>
+    <string name="custom_theme_motion">Springy motion</string>
+    <string name="custom_theme_hint">Tune every detail, then pick “Custom” in the theme list</string>
+
+    <!-- Fingerprint scanner -->
+    <string name="fingerprint_title">Fingerprint scanner</string>
+    <string name="fingerprint_hint">A decorative lock screen with an animated sensor</string>
+    <string name="fingerprint_on_home">Sensor on home screen</string>
+    <string name="fingerprint_vibration">Vibrate when unlocked</string>
+    <string name="fingerprint_open">Open scanner</string>
+    <string name="menu_action_fingerprint">Scanner</string>
+    <string name="fingerprint_tap">Touch the sensor</string>
+    <string name="fingerprint_scanning">Scanning fingerprint…</string>
+    <string name="fingerprint_unlocked">Recognized</string>
+    <string name="fingerprint_cancel">Cancel</string>
+    <string name="clock_hyper">HyperOS</string>
 </resources>

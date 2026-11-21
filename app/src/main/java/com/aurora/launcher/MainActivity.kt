@@ -44,7 +44,10 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
@@ -53,8 +56,10 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.dp
 import com.aurora.launcher.ui.theme.themeFadeSource
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
@@ -102,6 +107,8 @@ class MainActivity : ComponentActivity(), HomeActions {
     private var pendingIconApp: AppInfo? = null
     private var colorsListener: WallpaperManager.OnColorsChangedListener? = null
     private var showSettings by mutableStateOf(false)
+    /** Декоративный сканер отпечатка поверх стола. */
+    private var fingerprintVisible by mutableStateOf(false)
     /** С какой страницы открыть настройки: обычный вход — главная, из меню стола — темы. */
     private var settingsStartPage by mutableStateOf(SettingsPage.HOME)
     /** Системная настройка «Убрать анимации» выключена; перечитывается при возвращении в лаунчер. */
@@ -256,7 +263,7 @@ class MainActivity : ComponentActivity(), HomeActions {
         setContent {
             val raw by vm.settings.collectAsState()
             // Тема перекрывает то, что противоречит её характеру; весь интерфейс читает уже итоговые настройки
-            val spec = com.aurora.launcher.ui.theme.LauncherThemes.of(raw.style)
+            val spec = com.aurora.launcher.ui.theme.LauncherThemes.resolve(raw)
             val settings = remember(raw, spec, animatorsOn) { spec.effective(raw, animatorsOn) }
             val lite = spec.lite || (powerSave && raw.liteOnPowerSave)
             val fx = remember(lite, settings.animSpeed, settings.animBounce, settings.blurBackground, animatorsOn) {
@@ -349,6 +356,21 @@ class MainActivity : ComponentActivity(), HomeActions {
                         Box(Modifier.fillMaxSize().graphicsLayer { alpha = homeAlpha }) {
                             HomeScreen(vm, this@MainActivity)
                         }
+                        // Декоративный датчик в правом верхнем углу стола — открывает сканер по нажатию
+                        if (settings.fingerprintOnHome && !overGlass && !showSettings && !fingerprintVisible) {
+                            Box(
+                                Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars).padding(end = 12.dp, top = 4.dp),
+                                contentAlignment = Alignment.TopEnd,
+                            ) {
+                                com.aurora.launcher.ui.components.FingerprintHomeButton(onClick = { showFingerprint() })
+                            }
+                        }
+                        com.aurora.launcher.ui.components.FingerprintScannerOverlay(
+                            visible = fingerprintVisible,
+                            vibration = settings.fingerprintSound,
+                            onUnlock = { lockScreen() },
+                            onCancel = { fingerprintVisible = false },
+                        )
                         AnimatedVisibility(
                             visible = showSettings,
                             enter = fadeIn(MaterialTheme.motionScheme.fastEffectsSpec()) +
@@ -573,6 +595,10 @@ class MainActivity : ComponentActivity(), HomeActions {
             Class.forName("android.app.StatusBarManager").getMethod("expandNotificationsPanel").invoke(bar)
         }.isSuccess
         if (!ok && !GestureAccessibilityService.openNotifications()) toast(R.string.need_a11y)
+    }
+
+    override fun showFingerprint() {
+        fingerprintVisible = true
     }
 
     override fun lockScreen() {

@@ -38,18 +38,22 @@ import androidx.compose.material.icons.rounded.Opacity
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Style
 import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,6 +78,8 @@ import com.aurora.launcher.data.IconHighlight
 import com.aurora.launcher.data.LauncherStyle
 import com.aurora.launcher.data.Settings
 import com.aurora.launcher.data.ThemeMode
+import com.aurora.launcher.data.iconShapeFor
+import com.aurora.launcher.data.withIconShape
 import com.aurora.launcher.ui.components.glassEdge
 import com.aurora.launcher.ui.theme.LauncherThemes
 import com.aurora.launcher.ui.theme.LocalThemeSpec
@@ -94,9 +100,57 @@ fun ThemesPage(vm: LauncherViewModel) {
     SettingsSection(stringResource(R.string.themes_choose)) {
         ThemeCards(s.style, s) { spec -> switch { vm.updateSettings { it.copy(style = spec.style) } } }
     }
-    ThemeOptionsSection(vm, LauncherThemes.of(s.style))
+    if (s.style == LauncherStyle.CUSTOM) CustomThemeEditor(vm)
+    ThemeOptionsSection(vm, LauncherThemes.resolve(s))
     SettingsSection(stringResource(R.string.ready_widgets)) { ReadyWidgetsSection(vm) }
     SettingsSection(stringResource(R.string.appearance_mode)) { ThemeModeItem(vm) }
+}
+
+/** Конструктор «Своей темы»: имя, форма значков, стекло, док, свечение и характер движения. */
+@Composable
+private fun CustomThemeEditor(vm: LauncherViewModel) {
+    val s by vm.settings.collectAsState()
+    SettingsSection(stringResource(R.string.custom_theme_title)) {
+        GroupItem {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    stringResource(R.string.custom_theme_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = s.customThemeName,
+                    onValueChange = { v -> vm.updateSettings { it.copy(customThemeName = v.take(24)) } },
+                    label = { Text(stringResource(R.string.custom_theme_name)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    stringResource(R.string.custom_theme_shape),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                ShapePicker(s.customIconShape) { v -> vm.updateSettings { it.copy(customIconShape = v) } }
+            }
+        }
+        SliderItem(
+            Icons.Rounded.Style, stringResource(R.string.custom_theme_corner), s.customCorner,
+            0.6f..1.6f, { "${(it * 100).roundToInt()}%" }, steps = 5,
+        ) { v -> vm.updateSettings { it.copy(customCorner = v) } }
+        SliderItem(
+            Icons.Rounded.Lightbulb, stringResource(R.string.custom_theme_glow), s.customGlow,
+            0f..1f, { "${(it * 100).roundToInt()}%" }, steps = 5,
+        ) { v -> vm.updateSettings { it.copy(customGlow = v) } }
+        ToggleItem(
+            Icons.Rounded.BlurOn, stringResource(R.string.custom_theme_glass), null, s.customGlass,
+        ) { v -> vm.updateSettings { it.copy(customGlass = v) } }
+        ToggleItem(
+            Icons.Rounded.Dock, stringResource(R.string.custom_theme_dock), null, s.customDock,
+        ) { v -> vm.updateSettings { it.copy(customDock = v) } }
+        ToggleItem(
+            Icons.Rounded.Animation, stringResource(R.string.custom_theme_motion), null, s.customExpressive,
+        ) { v -> vm.updateSettings { it.copy(customExpressive = v) } }
+    }
 }
 
 /** Готовые наборы встроенных виджетов стола: один тап — и нужные элементы уже на месте. */
@@ -121,6 +175,22 @@ private fun ReadyWidgetsSection(vm: LauncherViewModel) {
         stringResource(R.string.ready_widget_clean_hint),
     ) {
         vm.updateSettings { it.copy(clockStyle = ClockStyle.OFF, showSearchPill = true) }
+    }
+    ActionItem(
+        Icons.Rounded.Animation, stringResource(R.string.ready_widget_hyper),
+        stringResource(R.string.ready_widget_hyper_hint),
+    ) {
+        vm.updateSettings {
+            it.copy(clockStyle = ClockStyle.HYPER, showDate = true, showBattery = true, showSearchPill = true)
+        }
+    }
+    ActionItem(
+        Icons.Rounded.Contrast, stringResource(R.string.ready_widget_nothing),
+        stringResource(R.string.ready_widget_nothing_hint),
+    ) {
+        vm.updateSettings {
+            it.copy(clockStyle = ClockStyle.COMPACT, showDate = true, showBattery = false, showSearchPill = true)
+        }
     }
 }
 
@@ -198,7 +268,11 @@ fun MiniDesktop(spec: ThemeSpec, s: Settings, modifier: Modifier = Modifier) {
         spec.glass -> RoundedCornerShape(28.dp)
         else -> RoundedCornerShape(24.dp)
     }
-    val wallpaper = Brush.linearGradient(listOf(cs.primaryContainer, cs.tertiaryContainer, cs.secondaryContainer))
+    val wallpaper = when (spec.style) {
+        LauncherStyle.NOTHING -> Brush.linearGradient(listOf(Color(0xFF050505), Color(0xFF242424)))
+        LauncherStyle.IOS -> Brush.linearGradient(listOf(cs.tertiaryContainer, cs.primaryContainer, cs.secondaryContainer))
+        else -> Brush.linearGradient(listOf(cs.primaryContainer, cs.tertiaryContainer, cs.secondaryContainer))
+    }
     Box(modifier.clip(outer).background(wallpaper)) {
         if (spec.glass) {
             // Мягкие пятна «обоев» под стеклом: размытие видно по ним
@@ -233,10 +307,12 @@ fun MiniDesktop(spec: ThemeSpec, s: Settings, modifier: Modifier = Modifier) {
 private fun MiniClock(spec: ThemeSpec, modifier: Modifier) {
     val cs = MaterialTheme.colorScheme
     when {
-        spec.style == com.aurora.launcher.data.LauncherStyle.NEON ->
-            Text("9:41", modifier, color = cs.primary, fontSize = 30.sp, fontWeight = FontWeight.Black)
-        spec.style == com.aurora.launcher.data.LauncherStyle.AURORA ->
-            Text("9:41", modifier, color = cs.onPrimaryContainer, fontSize = 30.sp, fontWeight = FontWeight.Medium)
+        spec.style == LauncherStyle.NOTHING ->
+            Text("9:41", modifier, color = cs.onSurface, fontSize = 30.sp, fontWeight = FontWeight.Normal, letterSpacing = (-1).sp)
+        spec.style == LauncherStyle.IOS ->
+            Text("9:41", modifier, color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Medium)
+        spec.style == LauncherStyle.CUSTOM ->
+            Text("9:41", modifier, color = cs.onPrimaryContainer, fontSize = 30.sp, fontWeight = FontWeight.SemiBold)
         spec.glass -> Text("9:41", modifier, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Light)
         spec.boldHeadlines -> Row(modifier, verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(34.dp).clip(MaterialShapes.Cookie9Sided.toShape()).background(cs.primary), contentAlignment = Alignment.Center) {
@@ -262,12 +338,16 @@ private fun MiniIcon(spec: ThemeSpec, index: Int, glyph: ImageVector, size: Dp) 
     val bg: Color
     val fg: Color
     when {
-        spec.style == com.aurora.launcher.data.LauncherStyle.NEON -> {
-            shape = RoundedCornerShape(size * 0.22f); bg = cs.primary; fg = cs.onPrimary
+        spec.style == LauncherStyle.NOTHING -> {
+            shape = RoundedCornerShape(size * 0.14f); bg = Color(0xFF1A1A1A); fg = Color.White
         }
-        spec.style == com.aurora.launcher.data.LauncherStyle.AURORA -> {
-            shape = RoundedCornerShape(size * 0.34f)
-            bg = cs.tertiaryContainer.copy(alpha = 0.85f); fg = cs.onTertiaryContainer
+        spec.style == LauncherStyle.IOS -> {
+            shape = RoundedCornerShape(size * 0.28f)
+            bg = Color.White.copy(alpha = 0.24f); fg = Color.White
+        }
+        spec.style == LauncherStyle.CUSTOM -> {
+            shape = RoundedCornerShape(size * 0.3f)
+            bg = cs.primaryContainer.copy(alpha = 0.9f); fg = cs.onPrimaryContainer
         }
         spec.glass -> { shape = RoundedCornerShape(size * 0.3f); bg = Color.White.copy(alpha = 0.22f); fg = Color.White }
         // Lite: как значки стокового Pixel — белые круги с цветным рисунком
@@ -299,9 +379,11 @@ private fun MiniDock(spec: ThemeSpec, count: Int, iconSize: Dp, glyphs: List<Ima
         else -> RoundedCornerShape(50)
     }
     val bg = when {
-        spec.style == com.aurora.launcher.data.LauncherStyle.NEON ->
-            Brush.verticalGradient(listOf(cs.primary, cs.primary))
-        spec.style == com.aurora.launcher.data.LauncherStyle.AURORA ->
+        spec.style == LauncherStyle.NOTHING ->
+            Brush.verticalGradient(listOf(Color(0xFF101010), Color(0xFF101010)))
+        spec.style == LauncherStyle.IOS ->
+            Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.3f), Color.White.copy(alpha = 0.16f)))
+        spec.style == LauncherStyle.CUSTOM ->
             Brush.verticalGradient(listOf(cs.secondaryContainer.copy(alpha = 0.8f), cs.tertiaryContainer.copy(alpha = 0.6f)))
         spec.glass -> Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.34f), Color.White.copy(alpha = 0.16f)))
         // Lite: у дока нет панели, значки прямо на обоях — как на рабочем столе в этой теме
@@ -402,8 +484,7 @@ fun ThemeOptionsSection(vm: LauncherViewModel, spec: ThemeSpec) {
         if (spec.lite) InfoItem(stringResource(R.string.theme_lite_info))
     }
     // У новых тем своя маска значков, чтобы переключение темы не сбивало форму иконок других тем
-    if (spec.style == LauncherStyle.AURORA || spec.style == LauncherStyle.NEON) {
-        val aurora = spec.style == LauncherStyle.AURORA
+    if (spec.style == LauncherStyle.IOS || spec.style == LauncherStyle.NOTHING || spec.style == LauncherStyle.CUSTOM) {
         SettingsSection(stringResource(R.string.app_style_shape)) {
             GroupItem {
                 Column(Modifier.padding(top = 12.dp)) {
@@ -411,9 +492,7 @@ fun ThemeOptionsSection(vm: LauncherViewModel, spec: ThemeSpec) {
                         stringResource(R.string.icon_shape), Modifier.padding(horizontal = 16.dp),
                         style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface,
                     )
-                    ShapePicker(if (aurora) s.auroraIconShape else s.neonIconShape) { v ->
-                        upd { if (aurora) it.copy(auroraIconShape = v) else it.copy(neonIconShape = v) }
-                    }
+                    ShapePicker(s.iconShapeFor(spec.style)) { v -> upd { it.withIconShape(spec.style, v) } }
                 }
             }
         }

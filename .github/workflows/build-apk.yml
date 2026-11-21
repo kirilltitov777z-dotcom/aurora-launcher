@@ -48,23 +48,23 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AuroraLauncher-2.2-apk
+          name: AuroraLauncher-3.0-apk
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.2
-          name: Aurora Launcher v2.2
+          tag_name: v3.0
+          name: Aurora Launcher v3.0
           body: |
-            Aurora Launcher v2.2 — own identity, no original author links.
+            Aurora Launcher v3.0 — full redesign.
 
-            - New logo: glowing aurora ring with a sparkle, all densities redrawn
-            - Author and channel links removed from About; settings fully rebranded
-            - Themes renamed: Glass, Pulse, Lite, Aurora, Neon
-            - Ready widgets presets in Themes settings (clock, compact, clean home)
-            - Larger icons by default, 3-tab menu, palette-tinted icons
+            - New theme lineup: Glass, Pulse, Lite, iOS, Nothing and Custom
+            - Neon and Aurora themes removed; Custom theme builder added
+            - Ready widgets: HyperOS gradient clock, Nothing clock, compact and clean presets
+            - Fake fingerprint scanner: animated lock overlay and home-screen sensor
+            - Neutral graphite/silver icon palette, refreshed copy and settings
           files: app/build/outputs/apk/release/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

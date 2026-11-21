@@ -212,7 +212,7 @@
     <string name="dock_radius">Скругление дока</string>
     <string name="label_size">Размер подписей</string>
     <string name="about_hint">Версия, разрешения, устройство</string>
-    <string name="about_desc">Aurora Launcher — домашний экран с пятью образами, живыми цветами, жестами и быстрым списком приложений. Твой стол — твои правила.</string>
+    <string name="about_desc">Aurora Launcher — домашний экран с шестью образами, живыми цветами, жестами, готовыми виджетами, сканером отпечатка и быстрым списком приложений. Твой стол — твои правила.</string>
     <plurals name="hidden_count">
         <item quantity="one">Скрыто: %d</item>
         <item quantity="few">Скрыто: %d</item>
@@ -371,7 +371,7 @@
     <string name="sb_gemini">Gemini</string>
     <!-- Темы -->
     <string name="set_themes">Темы</string>
-    <string name="set_themes_hint">Стекло, Импульс, Лайт, Аврора, Неон</string>
+    <string name="set_themes_hint">Стекло, Импульс, Лайт, iOS, Nothing, Своя</string>
     <string name="themes_choose">Тема</string>
     <string name="theme_glass">Стекло</string>
     <string name="theme_glass_tagline">Стекло и размытие</string>
@@ -379,10 +379,12 @@
     <string name="theme_expressive_tagline">Яркие формы и анимации</string>
     <string name="theme_lite">Лайт</string>
     <string name="theme_lite_tagline">Просто и быстро</string>
-    <string name="theme_aurora">Аврора</string>
-    <string name="theme_aurora_tagline">Светящееся стекло и цветные обои</string>
-    <string name="theme_neon">Неон</string>
-    <string name="theme_neon_tagline">Острые формы и яркая подсветка</string>
+    <string name="theme_ios">iOS</string>
+    <string name="theme_ios_tagline">Гладкое стекло и привычные жесты</string>
+    <string name="theme_nothing">Nothing</string>
+    <string name="theme_nothing_tagline">Монохром, чёткие формы, спокойствие</string>
+    <string name="theme_custom">Своя</string>
+    <string name="theme_custom_tagline">Собрана тобой</string>
     <string name="theme_settings_of">Настройки темы %1$s</string>
     <string name="dynamic_colors">Динамические цвета из обоев</string>
     <string name="dynamic_colors_hint">Цвета подстраиваются под обои (Android 12+)</string>
@@ -488,4 +490,32 @@
     <string name="ready_widget_compact_hint">Маленькие часы без строки батареи</string>
     <string name="ready_widget_clean">Чистый стол</string>
     <string name="ready_widget_clean_hint">Только строка поиска, без часов</string>
+    <string name="ready_widget_hyper">Часы HyperOS</string>
+    <string name="ready_widget_hyper_hint">Огромное время с градиентом, дата и батарея</string>
+    <string name="ready_widget_nothing">Часы Nothing</string>
+    <string name="ready_widget_nothing_hint">Точное минималистичное время без лишнего</string>
+
+    <!-- Конструктор своей темы -->
+    <string name="custom_theme_title">Своя тема</string>
+    <string name="custom_theme_name">Название темы</string>
+    <string name="custom_theme_shape">Форма значков</string>
+    <string name="custom_theme_corner">Скругление углов</string>
+    <string name="custom_theme_glass">Стеклянные панели</string>
+    <string name="custom_theme_dock">Фон дока</string>
+    <string name="custom_theme_glow">Мягкое свечение</string>
+    <string name="custom_theme_motion">Упругая анимация</string>
+    <string name="custom_theme_hint">Настрой всё, затем выбери «Своя» в списке тем</string>
+
+    <!-- Сканер отпечатка -->
+    <string name="fingerprint_title">Сканер отпечатка</string>
+    <string name="fingerprint_hint">Декоративный экран блокировки с анимированным датчиком</string>
+    <string name="fingerprint_on_home">Датчик на главном экране</string>
+    <string name="fingerprint_vibration">Вибрация при разблокировке</string>
+    <string name="fingerprint_open">Открыть сканер</string>
+    <string name="menu_action_fingerprint">Сканер</string>
+    <string name="fingerprint_tap">Коснись датчика</string>
+    <string name="fingerprint_scanning">Сканирование отпечатка…</string>
+    <string name="fingerprint_unlocked">Распознано</string>
+    <string name="fingerprint_cancel">Отмена</string>
+    <string name="clock_hyper">HyperOS</string>
 </resources>

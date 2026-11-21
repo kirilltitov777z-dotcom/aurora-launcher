@@ -67,7 +67,7 @@ enum class DrawerStyle { GRID, LIST }
 enum class DrawerSort { ALPHABETICAL, RECENT }
 enum class SearchPosition { TOP, BOTTOM }
 enum class GestureAction { NONE, NOTIFICATIONS, DRAWER, LOCK, SETTINGS, SEARCH }
-enum class ClockStyle { BIG, COMPACT, OFF }
+enum class ClockStyle { BIG, COMPACT, HYPER, OFF }
 enum class ClockAlign { START, CENTER, END }
 enum class MotionStyle { EXPRESSIVE, STANDARD }
 enum class PageTransition { DEPTH, SLIDE, CUBE, FADE }
@@ -75,8 +75,12 @@ enum class PageTransition { DEPTH, SLIDE, CUBE, FADE }
 /**
  * Тема лаунчера целиком: поверхности, формы, движение и эффекты. Описание каждой — в ui/theme/LauncherThemes.kt.
  * Хранится по имени, поэтому новые темы добавляются в конец без миграции.
+ *
+ * Старые значения AURORA и NEON больше не предлагаются: на смену им пришли выразительные темы iOS и
+ * Nothing, а также режим «Своя тема», где всё собирается пользователем. Для старых сохранённых настроек
+ * в SettingsStore есть миграция.
  */
-enum class LauncherStyle { LIQUID_GLASS, EXPRESSIVE, LITE, AURORA, NEON }
+enum class LauncherStyle { LIQUID_GLASS, EXPRESSIVE, LITE, IOS, NOTHING, CUSTOM }
 
 /** Язык интерфейса; [tag] == null — как в системе. */
 enum class AppLanguage(val tag: String?) { SYSTEM(null), RUSSIAN("ru"), ENGLISH("en") }
@@ -104,15 +108,23 @@ enum class GlassIconStyle { NORMAL, CLEAR, TINTED }
 @Immutable
 data class Settings(
     // Тема и первоначальная настройка
-    val style: LauncherStyle = LauncherStyle.AURORA,
+    val style: LauncherStyle = LauncherStyle.IOS,
     val glassOpacity: Float = 0.42f, // тонировка стеклянных панелей в теме Liquid Glass
     val glassIconStyle: GlassIconStyle = GlassIconStyle.NORMAL,
     val glassIconHighlight: IconHighlight = IconHighlight.CORNERS,
     val glassHighlightStrength: Float = 0.7f,
     val glassIconShape: IconShape = IconShape.CONTINUOUS, // маска значков в Liquid Glass
     val liteIconShape: IconShape = IconShape.CIRCLE, // маска значков в Material You Lite
-    val auroraIconShape: IconShape = IconShape.CONTINUOUS, // маска значков в теме Aurora
-    val neonIconShape: IconShape = IconShape.ROUNDED, // маска значков в теме Neon
+    val iosIconShape: IconShape = IconShape.CONTINUOUS, // маска значков в теме iOS
+    val nothingIconShape: IconShape = IconShape.ROUNDED, // маска значков в теме Nothing
+    // «Своя тема»: пользователь собирает тему из этих параметров
+    val customThemeName: String = "Моя тема",
+    val customIconShape: IconShape = IconShape.CONTINUOUS,
+    val customCorner: Float = 1f, // множитель скруглений 0.6..1.6
+    val customGlass: Boolean = true,
+    val customDock: Boolean = true,
+    val customGlow: Float = 0.25f,
+    val customExpressive: Boolean = true, // пружины и морфинг вместо спокойного движения
     val customWallpaper: Boolean = false,
     val wallpaperBlur: Float = 0f, // размытие своих обоев лаунчера, 0..1
     val wallpaperParallax: Boolean = true, // свои обои листаются вместе со страницами // лаунчер рисует свою картинку вместо системных обоев: её видит жидкое стекло
@@ -210,21 +222,26 @@ data class Settings(
     val hapticPages: Boolean = true,
     val hapticDrawer: Boolean = true,
     val searchEngine: Int = 0,
+    // Фейковый сканер отпечатка: декоративный экран блокировки с анимацией сканирования
+    val fingerprintOnHome: Boolean = true, // показывать компактный датчик в углу стола
+    val fingerprintSound: Boolean = true, // вибрация при «распознавании»
 )
 
-/** Форма значков выбранной темы: у Liquid Glass и Lite она своя, у Expressive — общая [Settings.iconShape]. */
+/** Форма значков выбранной темы: у большинства тем она своя, у Expressive — общая [Settings.iconShape]. */
 fun Settings.iconShapeFor(style: LauncherStyle): IconShape = when (style) {
     LauncherStyle.LIQUID_GLASS -> glassIconShape
     LauncherStyle.LITE -> liteIconShape
-    LauncherStyle.AURORA -> auroraIconShape
-    LauncherStyle.NEON -> neonIconShape
+    LauncherStyle.IOS -> iosIconShape
+    LauncherStyle.NOTHING -> nothingIconShape
+    LauncherStyle.CUSTOM -> customIconShape
     LauncherStyle.EXPRESSIVE -> iconShape
 }
 
 fun Settings.withIconShape(style: LauncherStyle, shape: IconShape): Settings = when (style) {
     LauncherStyle.LIQUID_GLASS -> copy(glassIconShape = shape)
     LauncherStyle.LITE -> copy(liteIconShape = shape)
-    LauncherStyle.AURORA -> copy(auroraIconShape = shape)
-    LauncherStyle.NEON -> copy(neonIconShape = shape)
+    LauncherStyle.IOS -> copy(iosIconShape = shape)
+    LauncherStyle.NOTHING -> copy(nothingIconShape = shape)
+    LauncherStyle.CUSTOM -> copy(customIconShape = shape)
     LauncherStyle.EXPRESSIVE -> copy(iconShape = shape)
 }

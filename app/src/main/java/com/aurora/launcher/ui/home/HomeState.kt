@@ -154,6 +154,8 @@ interface HomeActions {
     fun pickWallpaper()
     fun expandNotifications()
     fun lockScreen()
+    /** Показать декоративный сканер отпечатка; по умолчанию совпадает с блокировкой экрана. */
+    fun showFingerprint() = lockScreen()
     fun openClock()
     fun openUrl(url: String)
     fun setBlur(radiusDp: Int)
@@ -168,7 +170,7 @@ interface HomeActions {
             GestureAction.NONE -> Unit
             GestureAction.NOTIFICATIONS -> expandNotifications()
             GestureAction.DRAWER -> openDrawer()
-            GestureAction.LOCK -> lockScreen()
+            GestureAction.LOCK -> showFingerprint()
             GestureAction.SETTINGS -> openSettings()
             GestureAction.SEARCH -> openSearch()
         }

@@ -14,8 +14,8 @@ android {
         // versionCode обязательно расти: иначе часть установщиков не ставит APK поверх уже
         // установленной версии и пишет «Приложение не установлено»
         // Новая ветка форка: версия 2.0, код больше, чем у исходной 1.3 (код 3).
-        versionCode = 6
-        versionName = "2.2"
+        versionCode = 7
+        versionName = "3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

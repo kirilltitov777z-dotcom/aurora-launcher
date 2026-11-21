@@ -473,15 +473,19 @@ private fun MenuStyleTab(
     val cs = MaterialTheme.colorScheme
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(stringResource(R.string.home_themes), style = MaterialTheme.typography.labelLarge, color = cs.onSurface)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            for (spec in LauncherThemes.all) {
-                FilterChip(
-                    selected = s.style == spec.style,
-                    onClick = { switch { vm.updateSettings { it.copy(style = spec.style) } } },
-                    label = { Text(stringResource(spec.title), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    leadingIcon = { Icon(spec.icon, null, Modifier.size(16.dp)) },
-                    modifier = Modifier.weight(1f),
-                )
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            for (row in LauncherThemes.all.chunked(3)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    for (spec in row) {
+                        FilterChip(
+                            selected = s.style == spec.style,
+                            onClick = { switch { vm.updateSettings { it.copy(style = spec.style) } } },
+                            label = { Text(stringResource(spec.title), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            leadingIcon = { Icon(spec.icon, null, Modifier.size(16.dp)) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
             }
         }
         Text(stringResource(R.string.menu_quick_accent), style = MaterialTheme.typography.labelLarge, color = cs.onSurface)
@@ -522,7 +526,8 @@ private fun MenuActionsTab(
     onSettings: () -> Unit,
 ) {
     val items = listOf(
-        Triple(Icons.Rounded.Lock, R.string.menu_action_lock, { actions.lockScreen() }),
+        Triple(Icons.Rounded.Fingerprint, R.string.menu_action_lock, { actions.showFingerprint() }),
+        Triple(Icons.Rounded.Fingerprint, R.string.menu_action_fingerprint, { actions.showFingerprint() }),
         Triple(Icons.Rounded.Notifications, R.string.menu_action_notifications, { actions.expandNotifications() }),
         Triple(Icons.Rounded.Widgets, R.string.home_widgets, onWidgets),
         Triple(Icons.Rounded.Wallpaper, R.string.home_wallpaper, onWallpaper),
