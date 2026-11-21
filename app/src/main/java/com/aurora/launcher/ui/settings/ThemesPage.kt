@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Contrast
+import androidx.compose.material.icons.rounded.Dock
 import androidx.compose.material.icons.rounded.Email
 import androidx.compose.material.icons.rounded.Lightbulb
 import androidx.compose.material.icons.rounded.Map
