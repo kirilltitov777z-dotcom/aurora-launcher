@@ -158,40 +158,35 @@ private fun CustomThemeEditor(vm: LauncherViewModel) {
 private fun ReadyWidgetsSection(vm: LauncherViewModel) {
     ActionItem(
         Icons.Rounded.Lightbulb, stringResource(R.string.ready_widget_clock),
-        stringResource(R.string.ready_widget_clock_hint),
-    ) {
+        stringResource(R.string.ready_widget_clock_hint), onClick = {
         vm.updateSettings {
             it.copy(clockStyle = ClockStyle.BIG, showDate = true, showBattery = true, showSearchPill = true)
         }
-    }
+    })
     ActionItem(
         Icons.Rounded.Opacity, stringResource(R.string.ready_widget_compact),
-        stringResource(R.string.ready_widget_compact_hint),
-    ) {
+        stringResource(R.string.ready_widget_compact_hint), onClick = {
         vm.updateSettings { it.copy(clockStyle = ClockStyle.COMPACT, showBattery = false) }
-    }
+    })
     ActionItem(
         Icons.Rounded.Search, stringResource(R.string.ready_widget_clean),
-        stringResource(R.string.ready_widget_clean_hint),
-    ) {
+        stringResource(R.string.ready_widget_clean_hint), onClick = {
         vm.updateSettings { it.copy(clockStyle = ClockStyle.OFF, showSearchPill = true) }
-    }
+    })
     ActionItem(
         Icons.Rounded.Animation, stringResource(R.string.ready_widget_hyper),
-        stringResource(R.string.ready_widget_hyper_hint),
-    ) {
+        stringResource(R.string.ready_widget_hyper_hint), onClick = {
         vm.updateSettings {
             it.copy(clockStyle = ClockStyle.HYPER, showDate = true, showBattery = true, showSearchPill = true)
         }
-    }
+    })
     ActionItem(
         Icons.Rounded.Contrast, stringResource(R.string.ready_widget_nothing),
-        stringResource(R.string.ready_widget_nothing_hint),
-    ) {
+        stringResource(R.string.ready_widget_nothing_hint), onClick = {
         vm.updateSettings {
             it.copy(clockStyle = ClockStyle.COMPACT, showDate = true, showBattery = false, showSearchPill = true)
         }
-    }
+    })
 }
 
 /** Карточки трёх тем с живым мини-столом в каждой; выбранная отмечена. */

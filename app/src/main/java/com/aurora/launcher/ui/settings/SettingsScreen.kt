@@ -950,7 +950,7 @@ private fun GesturesPage(vm: LauncherViewModel, actions: HomeActions) {
         ToggleItem(
             Icons.Rounded.Vibration, stringResource(R.string.fingerprint_vibration), null, s.fingerprintSound,
         ) { v -> upd { it.copy(fingerprintSound = v) } }
-        ActionItem(Icons.Rounded.Fingerprint, stringResource(R.string.fingerprint_open), null) { actions.showFingerprint() }
+        ActionItem(Icons.Rounded.Fingerprint, stringResource(R.string.fingerprint_open), null, onClick = { actions.showFingerprint() })
     }
     PermissionsSection(actions, onlyGestures = true)
 }
